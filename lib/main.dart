@@ -1,105 +1,16 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'models/steam_game.dart';
+import 'data/database_helper.dart';
+import 'pages/game_editor_page.dart';
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const SteamFavoriteApp());
 }
 
 const moods = ['ทั้งหมด', 'มีความสุข', 'เศร้า', 'โกรธ', 'ผ่อนคลาย'];
-
-class SteamGame {
-  final String appId;
-  final String title;
-  final String description;
-  final String date;
-  final String mood;
-  final String imageUrl;
-  final double rating;
-
-  const SteamGame({
-    required this.appId,
-    required this.title,
-    required this.description,
-    required this.date,
-    required this.mood,
-    required this.imageUrl,
-    required this.rating,
-  });
-}
-
-const List<SteamGame> seedGames = [
-  SteamGame(
-    appId: '271590',
-    title: 'Grand Theft Auto V',
-    description:
-        'เกมแอ็กชันโอเพนเวิลด์ สำรวจเมือง Los Santos และทำภารกิจต่าง ๆ',
-    date: '8 ก.ย. 2569',
-    mood: 'มีความสุข',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/271590/header.jpg',
-    rating: 4.8,
-  ),
-  SteamGame(
-    appId: '1174180',
-    title: 'Red Dead Redemption 2',
-    description: 'ผจญภัยในดินแดนตะวันตกกับเรื่องราวเข้มข้นและโลกที่มีชีวิตชีวา',
-    date: '7 ก.ย. 2569',
-    mood: 'เศร้า',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/1174180/header.jpg',
-    rating: 4.9,
-  ),
-  SteamGame(
-    appId: '594650',
-    title: 'HUNT: Showdown 1896',
-    description: 'เกมล่าค่าหัวแบบ PvPvE ต่อสู้กับนักล่าและสัตว์ประหลาดในโลกมืด',
-    date: '6 ก.ย. 2569',
-    mood: 'โกรธ',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/594650/header.jpg',
-    rating: 4.5,
-  ),
-  SteamGame(
-    appId: '513710',
-    title: 'SCUM',
-    description: 'เกมเอาชีวิตรอดในเกาะอันตราย เก็บทรัพยากร สร้างฐาน และต่อสู้',
-    date: '5 ก.ย. 2569',
-    mood: 'โกรธ',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/513710/header.jpg',
-    rating: 4.2,
-  ),
-  SteamGame(
-    appId: '304930',
-    title: 'Unturned',
-    description: 'เกมเอาชีวิตรอดจากซอมบี้ สำรวจเมือง เก็บของ และเล่นกับเพื่อน',
-    date: '4 ก.ย. 2569',
-    mood: 'ผ่อนคลาย',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/304930/header.jpg',
-    rating: 4.4,
-  ),
-  SteamGame(
-    appId: '1623730',
-    title: 'Palworld',
-    description: 'เกมผจญภัยเอาชีวิตรอด จับ Pals สร้างฐาน และออกสำรวจโลกกว้าง',
-    date: '3 ก.ย. 2569',
-    mood: 'มีความสุข',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/1623730/header.jpg',
-    rating: 4.7,
-  ),
-  SteamGame(
-    appId: '633230',
-    title: 'NARUTO TO BORUTO: SHINOBI STRIKER',
-    description: 'เกมต่อสู้ทีมออนไลน์ ใช้นินจาจาก Naruto และสร้างทีมของตัวเอง',
-    date: '2 ก.ย. 2569',
-    mood: 'มีความสุข',
-    imageUrl:
-        'https://cdn.cloudflare.steamstatic.com/steam/apps/633230/header.jpg',
-    rating: 4.6,
-  ),
-];
 
 const cardColors = [
   Color(0xFFEAF2FF),
@@ -153,7 +64,50 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  final List<SteamGame> _games = List.of(seedGames);
+  List<SteamGame> _games = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final games = await DatabaseHelper.instance.readGames();
+      if (mounted) {
+        setState(() {
+          _games = games;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'โหลดข้อมูลไม่ได้ กรุณาลองใหม่';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _addGame() async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const GameEditorPage()),
+    );
+    if (saved == true && mounted) {
+      setState(() => _selectedMood = 'ทั้งหมด');
+      await _reload();
+    }
+  }
+
   int _selectedTab = 0;
   String _selectedMood = 'ทั้งหมด';
 
@@ -165,27 +119,12 @@ class _MainPageState extends State<MainPage> {
     }).toList();
   }
 
-  void _showAddUnavailable() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ยังใช้ฟีเจอร์นี้ไม่ได้'),
-        content: const Text('ฟีเจอร์เพิ่มเกมใหม่ยังไม่เปิดใช้งาน'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('ตกลง'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openDetail(SteamGame game) {
-    Navigator.push(
+  Future<void> _openDetail(SteamGame game) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => GameDetailPage(game: game)),
     );
+    if (mounted) await _reload();
   }
 
   @override
@@ -194,13 +133,29 @@ class _MainPageState extends State<MainPage> {
       body: IndexedStack(
         index: _selectedTab,
         children: [
-          GameListPage(
-            games: _filteredGames,
-            selectedMood: _selectedMood,
-            onMoodChanged: (value) => setState(() => _selectedMood = value),
-            onGameTap: _openDetail,
-            onAdd: _showAddUnavailable,
-          ),
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error!),
+                      TextButton(
+                        onPressed: _reload,
+                        child: const Text('ลองใหม่'),
+                      ),
+                    ],
+                  ),
+                )
+              : GameListPage(
+                  games: _filteredGames,
+                  selectedMood: _selectedMood,
+                  onMoodChanged: (value) =>
+                      setState(() => _selectedMood = value),
+                  onGameTap: _openDetail,
+                  onAdd: _addGame,
+                ),
           const AboutPage(),
         ],
       ),
@@ -311,9 +266,30 @@ class _GameListPageState extends State<GameListPage> {
         itemBuilder: (context, index) {
           if (index == 0) return _header(context);
           if (widget.games.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.only(top: 70),
-              child: Center(child: Text('ไม่พบเกมในหมวดนี้')),
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Column(
+                children: [
+                  const Icon(
+                    CupertinoIcons.game_controller,
+                    size: 72,
+                    color: Color(0xFF007AFF),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'ยังไม่มีเกมในรายการนี้',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('เริ่มเก็บความทรงจำกับเกมโปรดของคุณ'),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: widget.onAdd,
+                    icon: const Icon(Icons.add),
+                    label: const Text('เพิ่มเกมแรก'),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -422,22 +398,100 @@ class _StarRating extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (index) {
-        final icon = index < rating ? Icons.star : Icons.star_border;
+        final icon = rating >= index + 1
+            ? Icons.star
+            : rating > index
+            ? Icons.star_half
+            : Icons.star_border;
         return Icon(icon, color: Colors.amber.shade700, size: iconSize);
       }),
     );
   }
 }
 
-class GameDetailPage extends StatelessWidget {
+class GameDetailPage extends StatefulWidget {
   final SteamGame game;
 
   const GameDetailPage({super.key, required this.game});
+  @override
+  State<GameDetailPage> createState() => _GameDetailPageState();
+}
+
+class _GameDetailPageState extends State<GameDetailPage> {
+  late SteamGame game = widget.game;
+  bool _deleting = false;
+
+  Future<void> _edit() async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => GameEditorPage(game: game)),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      final games = await DatabaseHelper.instance.readGames();
+      if (mounted) {
+        setState(() => game = games.firstWhere((item) => item.id == game.id));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('โหลดข้อมูลหลังแก้ไขไม่สำเร็จ')),
+        );
+      }
+    }
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ลบเกมนี้?'),
+        content: Text('ลบ "${game.title}" จากรายการโปรด'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('ยกเลิก'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ยืนยันลบ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await DatabaseHelper.instance.deleteGame(game.id!);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ลบไม่สำเร็จ กรุณาลองใหม่')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('รายละเอียดเกม')),
+      appBar: AppBar(
+        title: const Text('รายละเอียดเกม'),
+        actions: [
+          IconButton(
+            tooltip: 'แก้ไขเกม',
+            onPressed: _deleting ? null : _edit,
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          IconButton(
+            tooltip: 'ลบเกม',
+            onPressed: _deleting ? null : _delete,
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
         children: [
@@ -616,7 +670,7 @@ class AboutPage extends StatelessWidget {
               const Text('รหัสนักศึกษา 67011212055'),
               const SizedBox(height: 18),
               const Text(
-                'เวอร์ชัน 1.0',
+                'เวอร์ชัน 2.0 • SQLite',
                 style: TextStyle(color: Colors.black45, fontSize: 13),
               ),
             ],
