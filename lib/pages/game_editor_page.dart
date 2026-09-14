@@ -4,7 +4,8 @@ import '../data/database_helper.dart';
 
 class GameEditorPage extends StatefulWidget {
   final SteamGame? game;
-  const GameEditorPage({super.key, this.game});
+  final DatabaseHelper? database;
+  const GameEditorPage({super.key, this.game, this.database});
   @override
   State<GameEditorPage> createState() => _GameEditorPageState();
 }
@@ -40,7 +41,7 @@ class _GameEditorPageState extends State<GameEditorPage> {
       _error = null;
     });
     try {
-      await DatabaseHelper.instance.saveGame(
+      await (widget.database ?? DatabaseHelper.instance).saveGame(
         SteamGame(
           id: widget.game?.id,
           appId: _appId.text.trim(),

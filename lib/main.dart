@@ -29,7 +29,8 @@ const iconColors = [
 ];
 
 class SteamFavoriteApp extends StatelessWidget {
-  const SteamFavoriteApp({super.key});
+  const SteamFavoriteApp({super.key, this.database});
+  final DatabaseHelper? database;
 
   @override
   Widget build(BuildContext context) {
@@ -51,19 +52,22 @@ class SteamFavoriteApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const MainPage(),
+      home: MainPage(database: database),
     );
   }
 }
 
 class MainPage extends StatefulWidget {
-  const MainPage({super.key});
+  const MainPage({super.key, this.database});
+  final DatabaseHelper? database;
 
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> {
+  DatabaseHelper get _database => widget.database ?? DatabaseHelper.instance;
+  final _searchController = TextEditingController();
   List<SteamGame> _games = [];
   bool _loading = true;
   String? _error;
@@ -74,13 +78,19 @@ class _MainPageState extends State<MainPage> {
     _reload();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _reload() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final games = await DatabaseHelper.instance.readGames();
+      final games = await _database.readGames();
       if (mounted) {
         setState(() {
           _games = games;
@@ -100,9 +110,10 @@ class _MainPageState extends State<MainPage> {
   Future<void> _addGame() async {
     final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => const GameEditorPage()),
+      MaterialPageRoute(builder: (_) => GameEditorPage(database: _database)),
     );
     if (saved == true && mounted) {
+      _searchController.clear();
       setState(() => _selectedMood = 'ทั้งหมด');
       await _reload();
     }
@@ -115,14 +126,19 @@ class _MainPageState extends State<MainPage> {
     return _games.where((game) {
       final moodMatches =
           _selectedMood == 'ทั้งหมด' || game.mood == _selectedMood;
-      return moodMatches;
+      final titleMatches = game.title.toLowerCase().contains(
+        _searchController.text.trim().toLowerCase(),
+      );
+      return moodMatches && titleMatches;
     }).toList();
   }
 
   Future<void> _openDetail(SteamGame game) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => GameDetailPage(game: game)),
+      MaterialPageRoute(
+        builder: (_) => GameDetailPage(game: game, database: _database),
+      ),
     );
     if (mounted) await _reload();
   }
@@ -150,6 +166,13 @@ class _MainPageState extends State<MainPage> {
                 )
               : GameListPage(
                   games: _filteredGames,
+                  totalCount: _games.length,
+                  searchController: _searchController,
+                  onSearchChanged: (_) => setState(() {}),
+                  onClearFilters: () => setState(() {
+                    _searchController.clear();
+                    _selectedMood = 'ทั้งหมด';
+                  }),
                   selectedMood: _selectedMood,
                   onMoodChanged: (value) =>
                       setState(() => _selectedMood = value),
@@ -182,6 +205,10 @@ class _MainPageState extends State<MainPage> {
 
 class GameListPage extends StatefulWidget {
   final List<SteamGame> games;
+  final int totalCount;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClearFilters;
   final String selectedMood;
   final ValueChanged<String> onMoodChanged;
   final ValueChanged<SteamGame> onGameTap;
@@ -190,6 +217,10 @@ class GameListPage extends StatefulWidget {
   const GameListPage({
     super.key,
     required this.games,
+    required this.totalCount,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onClearFilters,
     required this.selectedMood,
     required this.onMoodChanged,
     required this.onGameTap,
@@ -215,6 +246,32 @@ class _GameListPageState extends State<GameListPage> {
         const Text(
           'บันทึกเกมที่ชอบจาก Steam ไว้ในที่เดียว',
           style: TextStyle(color: Colors.black54, fontSize: 15),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('gameSearch'),
+          controller: widget.searchController,
+          onChanged: widget.onSearchChanged,
+          decoration: InputDecoration(
+            hintText: 'ค้นหาจากชื่อเกม',
+            prefixIcon: const Icon(CupertinoIcons.search),
+            suffixIcon: widget.searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'ล้างคำค้น',
+                    onPressed: () {
+                      widget.searchController.clear();
+                      widget.onSearchChanged('');
+                    },
+                    icon: const Icon(CupertinoIcons.xmark_circle_fill),
+                  ),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         SizedBox(
@@ -251,7 +308,7 @@ class _GameListPageState extends State<GameListPage> {
     final itemCount = widget.games.isEmpty ? 2 : widget.games.length + 1;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Steam Game Favorite'),
+        title: Text('เกมโปรดของฉัน (${widget.totalCount})'),
         actions: [
           IconButton(
             tooltip: 'เพิ่มเกมใหม่',
@@ -276,17 +333,33 @@ class _GameListPageState extends State<GameListPage> {
                     color: Color(0xFF007AFF),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'ยังไม่มีเกมในรายการนี้',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  Text(
+                    widget.totalCount == 0
+                        ? 'ยังไม่มีเกมในรายการนี้'
+                        : 'ไม่พบเกมที่ตรงกับตัวกรอง',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
-                  const Text('เริ่มเก็บความทรงจำกับเกมโปรดของคุณ'),
+                  Text(
+                    widget.totalCount == 0
+                        ? 'กดปุ่ม + เพื่อเพิ่มเกมแรกของคุณ'
+                        : 'ลองค้นหาคำอื่น หรือเลือกอารมณ์ทั้งหมด',
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
-                    onPressed: widget.onAdd,
-                    icon: const Icon(Icons.add),
-                    label: const Text('เพิ่มเกมแรก'),
+                    onPressed: widget.totalCount == 0
+                        ? widget.onAdd
+                        : widget.onClearFilters,
+                    icon: Icon(
+                      widget.totalCount == 0 ? Icons.add : Icons.filter_alt_off,
+                    ),
+                    label: Text(
+                      widget.totalCount == 0 ? 'เพิ่มเกมแรก' : 'ล้างตัวกรอง',
+                    ),
                   ),
                 ],
               ),
@@ -411,24 +484,28 @@ class _StarRating extends StatelessWidget {
 
 class GameDetailPage extends StatefulWidget {
   final SteamGame game;
+  final DatabaseHelper? database;
 
-  const GameDetailPage({super.key, required this.game});
+  const GameDetailPage({super.key, required this.game, this.database});
   @override
   State<GameDetailPage> createState() => _GameDetailPageState();
 }
 
 class _GameDetailPageState extends State<GameDetailPage> {
+  DatabaseHelper get _database => widget.database ?? DatabaseHelper.instance;
   late SteamGame game = widget.game;
   bool _deleting = false;
 
   Future<void> _edit() async {
     final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => GameEditorPage(game: game)),
+      MaterialPageRoute(
+        builder: (_) => GameEditorPage(game: game, database: _database),
+      ),
     );
     if (saved != true || !mounted) return;
     try {
-      final games = await DatabaseHelper.instance.readGames();
+      final games = await _database.readGames();
       if (mounted) {
         setState(() => game = games.firstWhere((item) => item.id == game.id));
       }
@@ -462,7 +539,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
     if (confirmed != true || !mounted) return;
     setState(() => _deleting = true);
     try {
-      await DatabaseHelper.instance.deleteGame(game.id!);
+      await _database.deleteGame(game.id!);
       if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted) {
