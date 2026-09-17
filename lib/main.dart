@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 
 import 'models/steam_game.dart';
 import 'data/database_helper.dart';
+import 'pages/community_page.dart';
 import 'pages/game_editor_page.dart';
+import 'pages/recommended_games_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +39,15 @@ class SteamFavoriteApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Steam Game Favorite',
+      builder: (context, child) => ColoredBox(
+        color: const Color(0xFFE5EAF2),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: child!,
+          ),
+        ),
+      ),
       theme: ThemeData(
         useMaterial3: true,
         platform: TargetPlatform.iOS,
@@ -179,6 +190,18 @@ class _MainPageState extends State<MainPage> {
                   onGameTap: _openDetail,
                   onAdd: _addGame,
                 ),
+          RecommendedGamesPage(
+            database: _database,
+            onSaved: () {
+              _searchController.clear();
+              setState(() {
+                _selectedMood = 'ทั้งหมด';
+                _selectedTab = 0;
+              });
+              _reload();
+            },
+          ),
+          const CommunityPage(),
           const AboutPage(),
         ],
       ),
@@ -192,6 +215,14 @@ class _MainPageState extends State<MainPage> {
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.game_controller_solid),
             label: 'เกมโปรด',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.compass),
+            label: 'ค้นพบเกม',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chat_bubble_2),
+            label: 'ชุมชน',
           ),
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.info),
@@ -747,7 +778,7 @@ class AboutPage extends StatelessWidget {
               const Text('รหัสนักศึกษา 67011212055'),
               const SizedBox(height: 18),
               const Text(
-                'เวอร์ชัน 2.0 • SQLite',
+                'เวอร์ชัน 3.0 • SQLite + 2 API',
                 style: TextStyle(color: Colors.black45, fontSize: 13),
               ),
             ],

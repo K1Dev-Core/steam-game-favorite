@@ -4,24 +4,26 @@ import '../data/database_helper.dart';
 
 class GameEditorPage extends StatefulWidget {
   final SteamGame? game;
+  final SteamGame? draft;
   final DatabaseHelper? database;
-  const GameEditorPage({super.key, this.game, this.database});
+  const GameEditorPage({super.key, this.game, this.draft, this.database});
   @override
   State<GameEditorPage> createState() => _GameEditorPageState();
 }
 
 class _GameEditorPageState extends State<GameEditorPage> {
   final _formKey = GlobalKey<FormState>();
-  late final _title = TextEditingController(text: widget.game?.title ?? '');
+  SteamGame? get _initial => widget.game ?? widget.draft;
+  late final _title = TextEditingController(text: _initial?.title ?? '');
   late final _description = TextEditingController(
-    text: widget.game?.description ?? '',
+    text: _initial?.description ?? '',
   );
-  late final _appId = TextEditingController(text: widget.game?.appId ?? '');
-  late final _image = TextEditingController(text: widget.game?.imageUrl ?? '');
-  late String _mood = widget.game?.mood ?? 'มีความสุข';
-  late double _rating = widget.game?.rating ?? 4;
+  late final _appId = TextEditingController(text: _initial?.appId ?? '');
+  late final _image = TextEditingController(text: _initial?.imageUrl ?? '');
+  late String _mood = _initial?.mood ?? 'มีความสุข';
+  late double _rating = _initial?.rating ?? 4;
   late String _date =
-      widget.game?.date ?? DateTime.now().toIso8601String().split('T').first;
+      _initial?.date ?? DateTime.now().toIso8601String().split('T').first;
   bool _saving = false;
   String? _error;
 

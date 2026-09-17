@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "headers": [
+    {"source": "/sqlite3.wasm", "headers": [{"key": "Content-Type", "value": "application/wasm"}]},
+    {"source": "/(.*)", "headers": [{"key": "X-Content-Type-Options", "value": "nosniff"}]}
+  ]
+}

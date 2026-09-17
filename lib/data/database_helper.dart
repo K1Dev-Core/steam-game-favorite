@@ -1,10 +1,12 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import '../models/steam_game.dart';
 
 class DatabaseHelper {
   DatabaseHelper({this.databasePath, DatabaseFactory? factory})
-    : _factory = factory ?? databaseFactory;
+    : _factory = factory ?? (kIsWeb ? databaseFactoryFfiWeb : databaseFactory);
   static final instance = DatabaseHelper();
   final String? databasePath;
   final DatabaseFactory _factory;
@@ -16,7 +18,12 @@ class DatabaseHelper {
     try {
       final path =
           databasePath ??
-          join(await _factory.getDatabasesPath(), 'steam_favorites_hw2.db');
+          (kIsWeb
+              ? 'steam_favorites_hw2.db'
+              : join(
+                  await _factory.getDatabasesPath(),
+                  'steam_favorites_hw2.db',
+                ));
       return await _factory.openDatabase(
         path,
         options: OpenDatabaseOptions(

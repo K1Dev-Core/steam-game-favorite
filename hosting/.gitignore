@@ -1,0 +1,4 @@
+.vercel/
+public/
+node_modules/
+.vercel
