@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class SteamGame {
-  final int? id;
+  final String? id;
+  final String userId;
   final String appId;
   final String title;
   final String description;
@@ -10,6 +13,7 @@ class SteamGame {
 
   const SteamGame({
     this.id,
+    this.userId = '',
     required this.appId,
     required this.title,
     required this.description,
@@ -19,8 +23,20 @@ class SteamGame {
     required this.rating,
   });
 
-  Map<String, Object?> toMap() => {
-    if (id != null) 'id': id,
+  SteamGame copyWith({String? id, String? userId}) => SteamGame(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    appId: appId,
+    title: title,
+    description: description,
+    date: date,
+    mood: mood,
+    imageUrl: imageUrl,
+    rating: rating,
+  );
+
+  Map<String, Object?> toFirestore(String ownerId) => {
+    'userId': ownerId,
     'appId': appId,
     'title': title,
     'description': description,
@@ -30,14 +46,20 @@ class SteamGame {
     'rating': rating,
   };
 
-  factory SteamGame.fromMap(Map<String, Object?> map) => SteamGame(
-    id: map['id'] as int,
-    appId: map['appId'] as String,
-    title: map['title'] as String,
-    description: map['description'] as String,
-    date: map['date'] as String,
-    mood: map['mood'] as String,
-    imageUrl: map['imageUrl'] as String,
-    rating: (map['rating'] as num).toDouble(),
-  );
+  factory SteamGame.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data() ?? const <String, dynamic>{};
+    return SteamGame(
+      id: document.id,
+      userId: data['userId'] as String? ?? '',
+      appId: data['appId'] as String? ?? '',
+      title: data['title'] as String? ?? '',
+      description: data['description'] as String? ?? '',
+      date: data['date'] as String? ?? '',
+      mood: data['mood'] as String? ?? 'มีความสุข',
+      imageUrl: data['imageUrl'] as String? ?? '',
+      rating: (data['rating'] as num?)?.toDouble() ?? 0,
+    );
+  }
 }

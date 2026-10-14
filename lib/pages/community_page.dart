@@ -1,5 +1,8 @@
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../widgets/ios_navigation_bar.dart';
+import '../widgets/profile_avatar.dart';
 import '../models/game_comment.dart';
 import '../services/api_service.dart';
 
@@ -28,7 +31,7 @@ class _CommunityPageState extends State<CommunityPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: IosNavigationBar(
       title: const Text('ชุมชน'),
       actions: [
         IconButton(
@@ -46,7 +49,7 @@ class _CommunityPageState extends State<CommunityPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(),
+                CupertinoActivityIndicator(),
                 SizedBox(height: 16),
                 Text('กำลังโหลดคอมเมนต์…'),
               ],
@@ -68,12 +71,9 @@ class _CommunityPageState extends State<CommunityPage> {
                   const SizedBox(height: 16),
                   const Text('โหลดคอมเมนต์ไม่สำเร็จ'),
                   const SizedBox(height: 8),
-                  Text(
-                    snapshot.error.toString(),
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(snapshot.error.toString(), textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-                  FilledButton(
+                  CupertinoButton.filled(
                     onPressed: _reload,
                     child: const Text('ลองใหม่'),
                   ),
@@ -82,8 +82,7 @@ class _CommunityPageState extends State<CommunityPage> {
             ),
           );
         }
-        final comments = [...(snapshot.data ?? [])]
-          ..shuffle(Random(_seed));
+        final comments = [...(snapshot.data ?? [])]..shuffle(Random(_seed));
         if (comments.isEmpty) {
           return const Center(child: Text('ยังไม่มีคอมเมนต์'));
         }
@@ -104,19 +103,7 @@ class _CommunityPageState extends State<CommunityPage> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: const Color(
-                            0xFF007AFF,
-                          ).withValues(alpha: 0.12),
-                          child: Text(
-                            c.user[0],
-                            style: const TextStyle(
-                              color: Color(0xFF007AFF),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
+                        ProfileAvatar(identity: c.user, size: 40),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(

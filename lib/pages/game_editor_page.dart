@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import '../widgets/ios_navigation_bar.dart';
 import '../models/steam_game.dart';
-import '../data/database_helper.dart';
+import '../repositories/game_repository.dart';
 
 class GameEditorPage extends StatefulWidget {
   final SteamGame? game;
   final SteamGame? draft;
-  final DatabaseHelper? database;
-  const GameEditorPage({super.key, this.game, this.draft, this.database});
+  final GameRepository repository;
+  const GameEditorPage({
+    super.key,
+    this.game,
+    this.draft,
+    required this.repository,
+  });
   @override
   State<GameEditorPage> createState() => _GameEditorPageState();
 }
@@ -43,7 +49,7 @@ class _GameEditorPageState extends State<GameEditorPage> {
       _error = null;
     });
     try {
-      await (widget.database ?? DatabaseHelper.instance).saveGame(
+      final saved = await widget.repository.saveGame(
         SteamGame(
           id: widget.game?.id,
           appId: _appId.text.trim(),
@@ -55,7 +61,7 @@ class _GameEditorPageState extends State<GameEditorPage> {
           rating: _rating,
         ),
       );
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, saved);
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -90,7 +96,7 @@ class _GameEditorPageState extends State<GameEditorPage> {
     return PopScope(
       canPop: !_saving,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: IosNavigationBar(
           title: Text(widget.game == null ? 'เพิ่มเกมโปรด' : 'แก้ไขเกม'),
         ),
         body: AbsorbPointer(

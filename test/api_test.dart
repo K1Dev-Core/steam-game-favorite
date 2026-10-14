@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mydiary_app/services/api_service.dart';
 import 'package:mydiary_app/pages/community_page.dart';
 import 'package:mydiary_app/pages/recommended_games_page.dart';
-import 'lab2_test.dart' show TestDatabase;
+import 'lab2_test.dart' show TestRepository;
 
 const sample = {
   'appId': '271590',
@@ -86,7 +87,7 @@ void main() {
       final response = Completer<http.Response>();
       var calls = 0;
       var saved = false;
-      final db = TestDatabase();
+      final repository = TestRepository();
       final api = ApiService(
         endpoint: 'https://games.example/api/games',
         client: MockClient((_) async {
@@ -104,14 +105,14 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: RecommendedGamesPage(
-            database: db,
+            repository: repository,
             api: api,
             onSaved: () => saved = true,
           ),
         ),
       );
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
       response.complete(http.Response('unavailable', 503));
       await tester.pumpAndSettle();
       expect(find.text('โหลดเกมไม่สำเร็จ'), findsOneWidget);
@@ -133,8 +134,8 @@ void main() {
       await tester.tap(find.text('บันทึก'));
       await tester.pumpAndSettle();
       expect(saved, isTrue);
-      expect(db.games.single.appId, '271590');
-      expect(db.games.single.description, 'รายละเอียดจาก API');
+      expect(repository.games.single.appId, '271590');
+      expect(repository.games.single.description, 'รายละเอียดจาก API');
       expect(tester.takeException(), isNull);
       api.close();
     },
@@ -161,7 +162,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: RecommendedGamesPage(
-            database: TestDatabase(),
+            repository: TestRepository(),
             api: api,
             onSaved: () {},
           ),
@@ -175,11 +176,7 @@ void main() {
       expect(find.text('GTA V'), findsOneWidget);
       expect(find.text('Dota 2'), findsOneWidget);
       // ดึงลงเพื่อรีเฟรชต้องโหลดใหม่โดยไม่พัง
-      await tester.fling(
-        find.byType(ListView),
-        const Offset(0, 300),
-        1000,
-      );
+      await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
       await tester.pumpAndSettle();
       expect(find.text('GTA V'), findsOneWidget);
       expect(find.text('Dota 2'), findsOneWidget);
@@ -187,15 +184,15 @@ void main() {
       api.close();
     },
   );
-const sampleComment = {
-  'id': 'c1',
-  'appId': '730',
-  'gameTitle': 'Counter-Strike 2',
-  'user': 'Nutty',
-  'text': 'ยิงหัวฟินมาก',
-  'rating': 5,
-  'date': '2026-09-12',
-};
+  const sampleComment = {
+    'id': 'c1',
+    'appId': '730',
+    'gameTitle': 'Counter-Strike 2',
+    'user': 'Nutty',
+    'text': 'ยิงหัวฟินมาก',
+    'rating': 5,
+    'date': '2026-09-12',
+  };
 
   ApiService commentsService(
     Future<http.Response> Function(http.Request) handler,
@@ -253,9 +250,7 @@ const sampleComment = {
         headers: {'content-type': 'application/json; charset=utf-8'},
       ),
     );
-    await tester.pumpWidget(
-      MaterialApp(home: CommunityPage(api: api)),
-    );
+    await tester.pumpWidget(MaterialApp(home: CommunityPage(api: api)));
     await tester.pumpAndSettle();
     expect(find.text('ยิงหัวฟินมาก'), findsOneWidget);
     expect(find.text('@Counter-Strike 2'), findsOneWidget);

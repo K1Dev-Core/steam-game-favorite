@@ -12,7 +12,6 @@ class GameComment {
   final String id, appId, gameTitle, user, text, date;
   final double rating;
 
-  // ponytail: รูปปก derive จาก appId เอง ไม่ต้องส่งซ้ำใน API
   String get imageUrl =>
       'https://cdn.cloudflare.steamstatic.com/steam/apps/$appId/header.jpg';
 

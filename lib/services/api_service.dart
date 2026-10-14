@@ -22,17 +22,17 @@ class ApiService {
        endpoint = endpoint ?? _defaultEndpoint(),
        commentsEndpoint = commentsEndpoint ?? _defaultCommentsEndpoint();
 
-  // ponytail: URL ตรงๆ ตัวแปรเดียว ไม่รับ dart-define
-  static const gamesApiUrl =
-      'https://steam-games-hw3.vercel.app/api/games';
+  static const gamesApiUrl = 'https://steam-games-hw3.vercel.app/api/games';
   static const commentsApiUrl =
       'https://steam-comments-hw3.vercel.app/api/comments';
 
-  static String _defaultEndpoint() => kIsWeb
+  static String _defaultEndpoint() =>
+      kIsWeb && !['localhost', '127.0.0.1'].contains(Uri.base.host)
       ? Uri.base.resolve('/api/games').toString()
       : gamesApiUrl;
 
-  static String _defaultCommentsEndpoint() => kIsWeb
+  static String _defaultCommentsEndpoint() =>
+      kIsWeb && !['localhost', '127.0.0.1'].contains(Uri.base.host)
       ? Uri.base.resolve('/api/comments').toString()
       : commentsApiUrl;
 
@@ -58,11 +58,7 @@ class ApiService {
   }
 
   Future<List<GameComment>> fetchComments() async {
-    return _getList(
-      commentsEndpoint,
-      'comments',
-      GameComment.fromJson,
-    );
+    return _getList(commentsEndpoint, 'comments', GameComment.fromJson);
   }
 
   Future<List<T>> _getList<T>(

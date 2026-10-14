@@ -1,14 +1,22 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'firebase_options.dart';
 import 'models/steam_game.dart';
-import 'data/database_helper.dart';
+import 'pages/auth_page.dart';
 import 'pages/community_page.dart';
 import 'pages/game_editor_page.dart';
 import 'pages/recommended_games_page.dart';
+import 'repositories/game_repository.dart';
+import 'services/firestore_game_repository.dart';
+import 'widgets/ios_navigation_bar.dart';
+import 'widgets/profile_avatar.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const SteamFavoriteApp());
 }
 
@@ -31,8 +39,9 @@ const iconColors = [
 ];
 
 class SteamFavoriteApp extends StatelessWidget {
-  const SteamFavoriteApp({super.key, this.database});
-  final DatabaseHelper? database;
+  const SteamFavoriteApp({super.key, this.repository, this.auth});
+  final GameRepository? repository;
+  final FirebaseAuth? auth;
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +49,10 @@ class SteamFavoriteApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Steam Game Favorite',
       builder: (context, child) => ColoredBox(
-        color: const Color(0xFFE5EAF2),
+        color: const Color(0xFFF2F2F7),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(maxWidth: 600),
             child: child!,
           ),
         ),
@@ -51,11 +60,33 @@ class SteamFavoriteApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         platform: TargetPlatform.iOS,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF007AFF),
+        fontFamily: '.SF Pro Text',
+        cupertinoOverrideTheme: const CupertinoThemeData(
+          primaryColor: Color(0xFF007AFF),
           brightness: Brightness.light,
         ),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF007AFF),
+          secondary: Color(0xFF007AFF),
+          surface: Colors.white,
+        ),
         scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            elevation: 0,
+            minimumSize: const Size(44, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+        ),
         appBarTheme: const AppBarTheme(
           centerTitle: true,
           backgroundColor: Color(0xFFF2F2F7),
@@ -63,31 +94,53 @@ class SteamFavoriteApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: MainPage(database: database),
+      home: repository != null
+          ? MainPage(repository: repository!)
+          : AuthGate(auth: auth),
     );
   }
 }
 
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key, this.auth});
+  final FirebaseAuth? auth;
+
+  FirebaseAuth get _auth => auth ?? FirebaseAuth.instance;
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<User?>(
+    stream: _auth.authStateChanges(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      if (snapshot.data == null) return AuthPage(auth: _auth);
+      return MainPage(
+        repository: FirestoreGameRepository(auth: _auth),
+        user: snapshot.data,
+        onSignOut: _auth.signOut,
+      );
+    },
+  );
+}
+
 class MainPage extends StatefulWidget {
-  const MainPage({super.key, this.database});
-  final DatabaseHelper? database;
+  const MainPage({
+    super.key,
+    required this.repository,
+    this.user,
+    this.onSignOut,
+  });
+  final GameRepository repository;
+  final User? user;
+  final Future<void> Function()? onSignOut;
 
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> {
-  DatabaseHelper get _database => widget.database ?? DatabaseHelper.instance;
   final _searchController = TextEditingController();
-  List<SteamGame> _games = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _reload();
-  }
 
   @override
   void dispose() {
@@ -95,46 +148,24 @@ class _MainPageState extends State<MainPage> {
     super.dispose();
   }
 
-  Future<void> _reload() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final games = await _database.readGames();
-      if (mounted) {
-        setState(() {
-          _games = games;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'โหลดข้อมูลไม่ได้ กรุณาลองใหม่';
-          _loading = false;
-        });
-      }
-    }
-  }
-
   Future<void> _addGame() async {
-    final saved = await Navigator.push<bool>(
+    final saved = await Navigator.push<SteamGame>(
       context,
-      MaterialPageRoute(builder: (_) => GameEditorPage(database: _database)),
+      MaterialPageRoute(
+        builder: (_) => GameEditorPage(repository: widget.repository),
+      ),
     );
-    if (saved == true && mounted) {
+    if (saved != null && mounted) {
       _searchController.clear();
       setState(() => _selectedMood = 'ทั้งหมด');
-      await _reload();
     }
   }
 
   int _selectedTab = 0;
   String _selectedMood = 'ทั้งหมด';
 
-  List<SteamGame> get _filteredGames {
-    return _games.where((game) {
+  List<SteamGame> _filteredGames(List<SteamGame> games) {
+    return games.where((game) {
       final moodMatches =
           _selectedMood == 'ทั้งหมด' || game.mood == _selectedMood;
       final titleMatches = game.title.toLowerCase().contains(
@@ -148,11 +179,57 @@ class _MainPageState extends State<MainPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => GameDetailPage(game: game, database: _database),
+        builder: (_) =>
+            GameDetailPage(game: game, repository: widget.repository),
       ),
     );
-    if (mounted) await _reload();
   }
+
+  Widget _cloudGameList() => StreamBuilder<List<SteamGame>>(
+    stream: widget.repository.watchGames(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting &&
+          !snapshot.hasData) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (snapshot.hasError) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off, size: 56, color: Colors.blueGrey),
+                const SizedBox(height: 12),
+                const Text('โหลดข้อมูลจาก Cloud ไม่สำเร็จ'),
+                const SizedBox(height: 6),
+                Text(
+                  snapshot.error.toString(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      final games = snapshot.data ?? const <SteamGame>[];
+      return GameListPage(
+        games: _filteredGames(games),
+        totalCount: games.length,
+        searchController: _searchController,
+        onSearchChanged: (_) => setState(() {}),
+        onClearFilters: () => setState(() {
+          _searchController.clear();
+          _selectedMood = 'ทั้งหมด';
+        }),
+        selectedMood: _selectedMood,
+        onMoodChanged: (value) => setState(() => _selectedMood = value),
+        onGameTap: _openDetail,
+        onAdd: _addGame,
+      );
+    },
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -160,72 +237,45 @@ class _MainPageState extends State<MainPage> {
       body: IndexedStack(
         index: _selectedTab,
         children: [
-          _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_error!),
-                      TextButton(
-                        onPressed: _reload,
-                        child: const Text('ลองใหม่'),
-                      ),
-                    ],
-                  ),
-                )
-              : GameListPage(
-                  games: _filteredGames,
-                  totalCount: _games.length,
-                  searchController: _searchController,
-                  onSearchChanged: (_) => setState(() {}),
-                  onClearFilters: () => setState(() {
-                    _searchController.clear();
-                    _selectedMood = 'ทั้งหมด';
-                  }),
-                  selectedMood: _selectedMood,
-                  onMoodChanged: (value) =>
-                      setState(() => _selectedMood = value),
-                  onGameTap: _openDetail,
-                  onAdd: _addGame,
-                ),
+          _cloudGameList(),
           RecommendedGamesPage(
-            database: _database,
+            repository: widget.repository,
             onSaved: () {
               _searchController.clear();
               setState(() {
                 _selectedMood = 'ทั้งหมด';
                 _selectedTab = 0;
               });
-              _reload();
             },
           ),
           const CommunityPage(),
-          const AboutPage(),
+          AboutPage(user: widget.user, onSignOut: widget.onSignOut),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: CupertinoTabBar(
+        backgroundColor: const Color(0xFAFFFFFF),
+        activeColor: const Color(0xFF007AFF),
         currentIndex: _selectedTab,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF007AFF),
-        unselectedItemColor: Colors.grey,
         onTap: (index) => setState(() => _selectedTab = index),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.game_controller_solid),
+            icon: Icon(CupertinoIcons.game_controller),
+            activeIcon: Icon(CupertinoIcons.game_controller_solid),
             label: 'เกมโปรด',
           ),
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.compass),
+            activeIcon: Icon(CupertinoIcons.compass_fill),
             label: 'ค้นพบเกม',
           ),
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.chat_bubble_2),
+            activeIcon: Icon(CupertinoIcons.chat_bubble_2_fill),
             label: 'ชุมชน',
           ),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.info),
+            icon: Icon(CupertinoIcons.person_crop_circle),
+            activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
             label: 'เกี่ยวกับ',
           ),
         ],
@@ -267,18 +317,44 @@ class _GameListPageState extends State<GameListPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'เกมโปรดของฉัน',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'เกมโปรด',
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${widget.totalCount} เกมที่บันทึกบน Cloud',
+                    style: const TextStyle(
+                      color: CupertinoColors.secondaryLabel,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton.filled(
+              tooltip: 'เพิ่มเกมใหม่',
+              onPressed: widget.onAdd,
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFF007AFF),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(CupertinoIcons.add),
+            ),
+          ],
         ),
-        const SizedBox(height: 5),
-        const Text(
-          'บันทึกเกมที่ชอบจาก Steam ไว้ในที่เดียว',
-          style: TextStyle(color: Colors.black54, fontSize: 15),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         TextField(
           key: const Key('gameSearch'),
           controller: widget.searchController,
@@ -298,6 +374,7 @@ class _GameListPageState extends State<GameListPage> {
                   ),
             filled: true,
             fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
@@ -314,7 +391,20 @@ class _GameListPageState extends State<GameListPage> {
             itemBuilder: (context, index) {
               final mood = moods[index];
               final selected = mood == widget.selectedMood;
+              const icons = [
+                CupertinoIcons.square_grid_2x2_fill,
+                CupertinoIcons.smiley_fill,
+                CupertinoIcons.drop_fill,
+                CupertinoIcons.flame_fill,
+                CupertinoIcons.leaf_arrow_circlepath,
+              ];
               return ChoiceChip(
+                showCheckmark: false,
+                avatar: Icon(
+                  icons[index],
+                  size: 15,
+                  color: selected ? Colors.white : const Color(0xFF007AFF),
+                ),
                 label: Text(mood),
                 selected: selected,
                 onSelected: (_) => widget.onMoodChanged(mood),
@@ -338,16 +428,7 @@ class _GameListPageState extends State<GameListPage> {
   Widget build(BuildContext context) {
     final itemCount = widget.games.isEmpty ? 2 : widget.games.length + 1;
     return Scaffold(
-      appBar: AppBar(
-        title: Text('เกมโปรดของฉัน (${widget.totalCount})'),
-        actions: [
-          IconButton(
-            tooltip: 'เพิ่มเกมใหม่',
-            onPressed: widget.onAdd,
-            icon: const Icon(CupertinoIcons.add),
-          ),
-        ],
-      ),
+      appBar: const IosNavigationBar(),
       body: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         itemCount: itemCount,
@@ -402,14 +483,15 @@ class _GameListPageState extends State<GameListPage> {
           final cardColor = cardColors[gameIndex % cardColors.length];
           final iconColor = iconColors[gameIndex % iconColors.length];
           return Card(
-            color: cardColor,
-            elevation: 1,
-            margin: const EdgeInsets.only(bottom: 12),
+            color: Colors.white,
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 14),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(22),
+              side: BorderSide(color: iconColor.withValues(alpha: 0.12)),
             ),
             child: ListTile(
-              contentPadding: const EdgeInsets.all(12),
+              contentPadding: const EdgeInsets.all(14),
               leading: _GameThumbnail(url: game.imageUrl, iconColor: iconColor),
               title: Text(
                 game.title,
@@ -423,12 +505,36 @@ class _GameListPageState extends State<GameListPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${game.mood}  •  ${game.date}\n${game.description}',
-                      maxLines: 2,
+                      game.description,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.black54),
                     ),
-                    const SizedBox(height: 4),
-                    _StarRating(rating: game.rating, iconSize: 15),
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            game.mood,
+                            style: TextStyle(
+                              color: iconColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _StarRating(rating: game.rating, iconSize: 14),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -515,38 +621,30 @@ class _StarRating extends StatelessWidget {
 
 class GameDetailPage extends StatefulWidget {
   final SteamGame game;
-  final DatabaseHelper? database;
+  final GameRepository repository;
 
-  const GameDetailPage({super.key, required this.game, this.database});
+  const GameDetailPage({
+    super.key,
+    required this.game,
+    required this.repository,
+  });
   @override
   State<GameDetailPage> createState() => _GameDetailPageState();
 }
 
 class _GameDetailPageState extends State<GameDetailPage> {
-  DatabaseHelper get _database => widget.database ?? DatabaseHelper.instance;
   late SteamGame game = widget.game;
   bool _deleting = false;
 
   Future<void> _edit() async {
-    final saved = await Navigator.push<bool>(
+    final saved = await Navigator.push<SteamGame>(
       context,
       MaterialPageRoute(
-        builder: (_) => GameEditorPage(game: game, database: _database),
+        builder: (_) =>
+            GameEditorPage(game: game, repository: widget.repository),
       ),
     );
-    if (saved != true || !mounted) return;
-    try {
-      final games = await _database.readGames();
-      if (mounted) {
-        setState(() => game = games.firstWhere((item) => item.id == game.id));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('โหลดข้อมูลหลังแก้ไขไม่สำเร็จ')),
-        );
-      }
-    }
+    if (saved != null && mounted) setState(() => game = saved);
   }
 
   Future<void> _delete() async {
@@ -570,7 +668,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
     if (confirmed != true || !mounted) return;
     setState(() => _deleting = true);
     try {
-      await _database.deleteGame(game.id!);
+      await widget.repository.deleteGame(game.id!);
       if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted) {
@@ -585,7 +683,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: IosNavigationBar(
         title: const Text('รายละเอียดเกม'),
         actions: [
           IconButton(
@@ -736,53 +834,67 @@ class _MoodBadge extends StatelessWidget {
 }
 
 class AboutPage extends StatelessWidget {
-  const AboutPage({super.key});
+  const AboutPage({super.key, this.user, this.onSignOut});
+  final User? user;
+  final Future<void> Function()? onSignOut;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('เกี่ยวกับแอป')),
-      body: Center(
-        child: Padding(
+      appBar: const IosNavigationBar(title: Text('เกี่ยวกับแอป')),
+      body: SafeArea(
+        child: ListView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF007AFF).withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
+          children: [
+            const SizedBox(height: 36),
+            Column(
+              children: [
+                ProfileAvatar(identity: user?.uid ?? 'steam-favorite', size: 96),
+                if (user != null) ...[
+                  const SizedBox(height: 22),
+                  Text(
+                    user!.email ?? 'บัญชี Firebase',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    'UID: ${user!.uid}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 22),
+                const Text(
+                  'Steam Game Favorite',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 27, fontWeight: FontWeight.w700),
                 ),
-                child: const Icon(
-                  CupertinoIcons.game_controller_solid,
-                  size: 44,
-                  color: Color(0xFF007AFF),
+                const SizedBox(height: 8),
+                const Text(
+                  'แอปบันทึกเกมโปรดจาก Steam',
+                  style: TextStyle(color: Colors.black54, fontSize: 16),
                 ),
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'Steam Game Favorite',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 27, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'แอปบันทึกเกมโปรดจาก Steam',
-                style: TextStyle(color: Colors.black54, fontSize: 16),
-              ),
-              const SizedBox(height: 22),
-              const Text('สร้างโดย วชิรวิทย์ วงค์แสง'),
-              const SizedBox(height: 5),
-              const Text('รหัสนักศึกษา 67011212055'),
-              const SizedBox(height: 18),
-              const Text(
-                'เวอร์ชัน 3.0 • SQLite + 2 API',
-                style: TextStyle(color: Colors.black45, fontSize: 13),
-              ),
-            ],
-          ),
+                const SizedBox(height: 22),
+                const Text('สร้างโดย วชิรวิทย์ วงค์แสง'),
+                const SizedBox(height: 5),
+                const Text('รหัสนักศึกษา 67011212055'),
+                const SizedBox(height: 18),
+                const Text(
+                  'เวอร์ชัน 6.0 • Firebase Auth + Firestore + 2 API',
+                  style: TextStyle(color: Colors.black45, fontSize: 13),
+                ),
+                if (onSignOut != null) ...[
+                  const SizedBox(height: 24),
+                  OutlinedButton.icon(
+                    key: const Key('signOutButton'),
+                    onPressed: onSignOut,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('ออกจากระบบ'),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );

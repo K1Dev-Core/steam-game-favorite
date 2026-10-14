@@ -1,18 +1,21 @@
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../data/database_helper.dart';
+import '../widgets/ios_navigation_bar.dart';
 import '../models/recommended_game.dart';
+import '../models/steam_game.dart';
+import '../repositories/game_repository.dart';
 import '../services/api_service.dart';
 import 'game_editor_page.dart';
 
 class RecommendedGamesPage extends StatefulWidget {
   const RecommendedGamesPage({
     super.key,
-    required this.database,
+    required this.repository,
     required this.onSaved,
     this.api,
   });
-  final DatabaseHelper database;
+  final GameRepository repository;
   final VoidCallback onSaved;
   final ApiService? api;
   @override
@@ -22,7 +25,7 @@ class RecommendedGamesPage extends StatefulWidget {
 class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
   late final ApiService _api = widget.api ?? ApiService();
   late Future<List<RecommendedGame>> _future = _api.fetchGames();
-  int _seed = 0; // ponytail: seed เดียวคุมลำดับสุ่มทั้งหน้า เสถียรข้าม rebuild
+  int _seed = 0;
   @override
   void dispose() {
     if (widget.api == null) _api.close();
@@ -45,27 +48,40 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
     final saved = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            RecommendedGameDetailPage(game: game, database: widget.database),
+        builder: (_) => RecommendedGameDetailPage(
+          game: game,
+          repository: widget.repository,
+        ),
       ),
     );
     if (saved == true && mounted) widget.onSaved();
   }
 
   Future<void> _quickAdd(RecommendedGame game) async {
-    final saved = await Navigator.push<bool>(
+    final saved = await Navigator.push<SteamGame>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            GameEditorPage(database: widget.database, draft: game.toDraft()),
+        builder: (_) => GameEditorPage(
+          repository: widget.repository,
+          draft: game.toDraft(),
+        ),
       ),
     );
-    if (saved == true && mounted) widget.onSaved();
+    if (saved != null && mounted) widget.onSaved();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('ค้นพบเกม')),
+    appBar: IosNavigationBar(
+      title: const Text('ค้นพบเกม'),
+      actions: [
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: _reload,
+          child: const Icon(CupertinoIcons.shuffle, size: 23),
+        ),
+      ],
+    ),
     body: SafeArea(
       child: Column(
         children: [
@@ -94,7 +110,7 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircularProgressIndicator(),
+                          CupertinoActivityIndicator(),
                           SizedBox(height: 16),
                           Text('กำลังโหลดเกม…'),
                         ],
@@ -103,7 +119,7 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
                   }
                   if (snapshot.hasError) {
                     return _Status(
-                      icon: Icons.cloud_off_outlined,
+                      icon: CupertinoIcons.wifi_slash,
                       title: 'โหลดเกมไม่สำเร็จ',
                       message: snapshot.error.toString(),
                       onRetry: _reload,
@@ -118,7 +134,6 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
                       onRetry: _reload,
                     );
                   }
-                  // ponytail: สุ่มลำดับด้วย seed เดียว ทุกใบการ์ดเหมือนกันหมด
                   final order = [...games]..shuffle(Random(_seed));
                   return ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -164,10 +179,11 @@ class _GameCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   game.title,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.start,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -175,16 +191,33 @@ class _GameCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   game.description,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.start,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
-                Center(
-                  child: IconButton.filled(
-                    tooltip: 'เพิ่มลงเกมโปรด',
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: CupertinoButton.tinted(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     onPressed: onAdd,
-                    icon: const Icon(Icons.add),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.add, size: 17),
+                        SizedBox(width: 6),
+                        Text(
+                          'เพิ่มเกมโปรด',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -200,13 +233,13 @@ class RecommendedGameDetailPage extends StatelessWidget {
   const RecommendedGameDetailPage({
     super.key,
     required this.game,
-    required this.database,
+    required this.repository,
   });
   final RecommendedGame game;
-  final DatabaseHelper database;
+  final GameRepository repository;
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('รายละเอียดเกมแนะนำ')),
+    appBar: const IosNavigationBar(title: Text('รายละเอียดเกมแนะนำ')),
     body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(20),
@@ -237,14 +270,16 @@ class RecommendedGameDetailPage extends StatelessWidget {
             icon: const Icon(Icons.favorite_border),
             label: const Text('เพิ่มลงเกมโปรด'),
             onPressed: () async {
-              final saved = await Navigator.push<bool>(
+              final saved = await Navigator.push<SteamGame>(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      GameEditorPage(database: database, draft: game.toDraft()),
+                  builder: (_) => GameEditorPage(
+                    repository: repository,
+                    draft: game.toDraft(),
+                  ),
                 ),
               );
-              if (saved == true && context.mounted) {
+              if (saved != null && context.mounted) {
                 Navigator.pop(context, true);
               }
             },
@@ -297,13 +332,43 @@ class _Status extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 64, color: Colors.blueGrey),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE5E5EA),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(icon, size: 32, color: CupertinoColors.secondaryLabel),
+          ),
           const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 300),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
-          FilledButton(onPressed: onRetry, child: const Text('ลองใหม่')),
+          CupertinoButton.filled(
+            borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+            onPressed: onRetry,
+            child: const Text(
+              'ลองใหม่',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     ),
