@@ -103,7 +103,11 @@ class _CommunityPageState extends State<CommunityPage> {
                   children: [
                     Row(
                       children: [
-                        ProfileAvatar(identity: c.user, size: 40),
+                        ProfileAvatar(
+                          identity: c.user,
+                          size: 40,
+                          loadRemote: widget.api == null,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(

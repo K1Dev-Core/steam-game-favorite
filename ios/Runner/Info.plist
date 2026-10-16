@@ -24,6 +24,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ใช้ถ่ายภาพปกเกมที่ต้องการบันทึก</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ใช้เลือกรูปปกเกมจากคลังภาพ</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

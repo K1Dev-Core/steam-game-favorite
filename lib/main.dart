@@ -13,6 +13,7 @@ import 'repositories/game_repository.dart';
 import 'services/firestore_game_repository.dart';
 import 'widgets/ios_navigation_bar.dart';
 import 'widgets/profile_avatar.dart';
+import 'widgets/game_artwork.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,17 @@ Future<void> main() async {
   runApp(const SteamFavoriteApp());
 }
 
-const moods = ['ทั้งหมด', 'มีความสุข', 'เศร้า', 'โกรธ', 'ผ่อนคลาย'];
+const genres = [
+  'ทั้งหมด',
+  'Action',
+  'Adventure',
+  'FPS',
+  'RPG',
+  'Survival',
+  'Strategy',
+  'Simulation',
+  'อื่น ๆ',
+];
 
 const cardColors = [
   Color(0xFFEAF2FF),
@@ -157,21 +168,26 @@ class _MainPageState extends State<MainPage> {
     );
     if (saved != null && mounted) {
       _searchController.clear();
-      setState(() => _selectedMood = 'ทั้งหมด');
+      setState(() {
+        _selectedGenre = 'ทั้งหมด';
+        _favoritesOnly = false;
+      });
     }
   }
 
   int _selectedTab = 0;
-  String _selectedMood = 'ทั้งหมด';
+  String _selectedGenre = 'ทั้งหมด';
+  bool _favoritesOnly = false;
 
   List<SteamGame> _filteredGames(List<SteamGame> games) {
     return games.where((game) {
-      final moodMatches =
-          _selectedMood == 'ทั้งหมด' || game.mood == _selectedMood;
+      final genreMatches =
+          _selectedGenre == 'ทั้งหมด' || game.genre == _selectedGenre;
+      final favoriteMatches = !_favoritesOnly || game.isFavorite;
       final titleMatches = game.title.toLowerCase().contains(
         _searchController.text.trim().toLowerCase(),
       );
-      return moodMatches && titleMatches;
+      return genreMatches && favoriteMatches && titleMatches;
     }).toList();
   }
 
@@ -221,10 +237,13 @@ class _MainPageState extends State<MainPage> {
         onSearchChanged: (_) => setState(() {}),
         onClearFilters: () => setState(() {
           _searchController.clear();
-          _selectedMood = 'ทั้งหมด';
+          _selectedGenre = 'ทั้งหมด';
+          _favoritesOnly = false;
         }),
-        selectedMood: _selectedMood,
-        onMoodChanged: (value) => setState(() => _selectedMood = value),
+        selectedGenre: _selectedGenre,
+        favoritesOnly: _favoritesOnly,
+        onFavoritesChanged: (value) => setState(() => _favoritesOnly = value),
+        onGenreChanged: (value) => setState(() => _selectedGenre = value),
         onGameTap: _openDetail,
         onAdd: _addGame,
       );
@@ -243,7 +262,8 @@ class _MainPageState extends State<MainPage> {
             onSaved: () {
               _searchController.clear();
               setState(() {
-                _selectedMood = 'ทั้งหมด';
+                _selectedGenre = 'ทั้งหมด';
+                _favoritesOnly = false;
                 _selectedTab = 0;
               });
             },
@@ -290,8 +310,10 @@ class GameListPage extends StatefulWidget {
   final TextEditingController searchController;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onClearFilters;
-  final String selectedMood;
-  final ValueChanged<String> onMoodChanged;
+  final String selectedGenre;
+  final bool favoritesOnly;
+  final ValueChanged<bool> onFavoritesChanged;
+  final ValueChanged<String> onGenreChanged;
   final ValueChanged<SteamGame> onGameTap;
   final VoidCallback onAdd;
 
@@ -302,8 +324,10 @@ class GameListPage extends StatefulWidget {
     required this.searchController,
     required this.onSearchChanged,
     required this.onClearFilters,
-    required this.selectedMood,
-    required this.onMoodChanged,
+    required this.selectedGenre,
+    required this.favoritesOnly,
+    required this.onFavoritesChanged,
+    required this.onGenreChanged,
     required this.onGameTap,
     required this.onAdd,
   });
@@ -382,21 +406,46 @@ class _GameListPageState extends State<GameListPage> {
           ),
         ),
         const SizedBox(height: 16),
+        ChoiceChip(
+          showCheckmark: false,
+          avatar: Icon(
+            CupertinoIcons.heart_fill,
+            size: 15,
+            color: widget.favoritesOnly
+                ? Colors.white
+                : const Color(0xFF007AFF),
+          ),
+          label: const Text('รายการโปรดเท่านั้น'),
+          selected: widget.favoritesOnly,
+          onSelected: widget.onFavoritesChanged,
+          selectedColor: const Color(0xFF007AFF),
+          backgroundColor: Colors.white,
+          labelStyle: TextStyle(
+            color: widget.favoritesOnly ? Colors.white : Colors.black87,
+            fontSize: 13,
+          ),
+          side: BorderSide.none,
+        ),
+        const SizedBox(height: 10),
         SizedBox(
           height: 38,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: moods.length,
+            itemCount: genres.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              final mood = moods[index];
-              final selected = mood == widget.selectedMood;
+              final genre = genres[index];
+              final selected = genre == widget.selectedGenre;
               const icons = [
                 CupertinoIcons.square_grid_2x2_fill,
-                CupertinoIcons.smiley_fill,
-                CupertinoIcons.drop_fill,
-                CupertinoIcons.flame_fill,
-                CupertinoIcons.leaf_arrow_circlepath,
+                CupertinoIcons.bolt_fill,
+                CupertinoIcons.map_fill,
+                CupertinoIcons.scope,
+                CupertinoIcons.shield_fill,
+                CupertinoIcons.flag_fill,
+                CupertinoIcons.building_2_fill,
+                CupertinoIcons.gear_solid,
+                CupertinoIcons.game_controller_solid,
               ];
               return ChoiceChip(
                 showCheckmark: false,
@@ -405,9 +454,9 @@ class _GameListPageState extends State<GameListPage> {
                   size: 15,
                   color: selected ? Colors.white : const Color(0xFF007AFF),
                 ),
-                label: Text(mood),
+                label: Text(genre),
                 selected: selected,
-                onSelected: (_) => widget.onMoodChanged(mood),
+                onSelected: (_) => widget.onGenreChanged(genre),
                 selectedColor: const Color(0xFF007AFF),
                 backgroundColor: Colors.white,
                 labelStyle: TextStyle(
@@ -523,7 +572,7 @@ class _GameListPageState extends State<GameListPage> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            game.mood,
+                            game.genre,
                             style: TextStyle(
                               color: iconColor,
                               fontSize: 11,
@@ -563,13 +612,7 @@ class _GameThumbnail extends StatelessWidget {
         height: 58,
         child: url.isEmpty
             ? _fallback()
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) =>
-                    progress == null ? child : _fallback(loading: true),
-                errorBuilder: (context, error, stackTrace) => _fallback(),
-              ),
+            : GameArtwork(source: url, placeholder: _fallback(loading: true)),
       ),
     );
   }
@@ -712,7 +755,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _MoodBadge(mood: game.mood),
+              _MoodBadge(mood: game.genre),
               const SizedBox(width: 10),
               const Icon(Icons.calendar_today_outlined, size: 16),
               const SizedBox(width: 5),
@@ -727,6 +770,23 @@ class _GameDetailPageState extends State<GameDetailPage> {
               Text(
                 '${game.rating.toStringAsFixed(1)} / 5',
                 style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                game.isFavorite
+                    ? CupertinoIcons.heart_fill
+                    : CupertinoIcons.heart,
+                color: const Color(0xFF007AFF),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                game.isFavorite
+                    ? 'อยู่ในรายการโปรด'
+                    : 'ยังไม่ได้เก็บเป็นรายการโปรด',
               ),
             ],
           ),
@@ -765,14 +825,9 @@ class _DetailImage extends StatelessWidget {
         height: 205,
         child: url.isEmpty
             ? const _DetailPlaceholder()
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) => progress == null
-                    ? child
-                    : const _DetailPlaceholder(loading: true),
-                errorBuilder: (context, error, stackTrace) =>
-                    const _DetailPlaceholder(),
+            : GameArtwork(
+                source: url,
+                placeholder: const _DetailPlaceholder(loading: true),
               ),
       ),
     );
@@ -849,7 +904,11 @@ class AboutPage extends StatelessWidget {
             const SizedBox(height: 36),
             Column(
               children: [
-                ProfileAvatar(identity: user?.uid ?? 'steam-favorite', size: 96),
+                ProfileAvatar(
+                  identity: user?.uid ?? 'steam-favorite',
+                  size: 96,
+                  loadRemote: user != null,
+                ),
                 if (user != null) ...[
                   const SizedBox(height: 22),
                   Text(
@@ -880,7 +939,7 @@ class AboutPage extends StatelessWidget {
                 const Text('รหัสนักศึกษา 67011212055'),
                 const SizedBox(height: 18),
                 const Text(
-                  'เวอร์ชัน 6.0 • Firebase Auth + Firestore + 2 API',
+                  'เวอร์ชัน 7.0 • SQLite + Firestore + REST API',
                   style: TextStyle(color: Colors.black45, fontSize: 13),
                 ),
                 if (onSignOut != null) ...[

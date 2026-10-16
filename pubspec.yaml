@@ -1,7 +1,7 @@
 name: mydiary_app
 description: Steam Game Favorite with Firebase Auth and Firestore.
 publish_to: 'none'
-version: 6.0.0+6
+version: 7.0.0+7
 
 environment:
   sdk: ^3.10.8
@@ -15,6 +15,10 @@ dependencies:
   firebase_core: ^4.15.0
   http: ^1.2.2
   flutter_svg: ^2.3.0
+  sqflite: ^2.4.2+1
+  path: ^1.9.1
+  image_picker: ^1.2.3
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   integration_test:

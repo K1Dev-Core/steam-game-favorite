@@ -2,9 +2,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class ProfileAvatar extends StatelessWidget {
-  const ProfileAvatar({super.key, required this.identity, this.size = 40});
+  const ProfileAvatar({
+    super.key,
+    required this.identity,
+    this.size = 40,
+    this.loadRemote = true,
+  });
   final String identity;
   final double size;
+  final bool loadRemote;
 
   String get _seed {
     var hash = 2166136261;
@@ -20,18 +26,22 @@ class ProfileAvatar extends StatelessWidget {
       dimension: size,
       child: ColoredBox(
         color: const Color(0xFFE9EEF5),
-        child: SvgPicture.network(
-          'https://api.dicebear.com/10.x/clay/svg?seed=$_seed',
-          fit: BoxFit.cover,
-          placeholderBuilder: (_) =>
-              const Center(child: CupertinoActivityIndicator(radius: 8)),
-          errorBuilder: (_, error, stackTrace) => Icon(
-            CupertinoIcons.person_fill,
-            size: size * 0.5,
-            color: const Color(0xFF8E8E93),
-          ),
-        ),
+        child: loadRemote
+            ? SvgPicture.network(
+                'https://api.dicebear.com/10.x/clay/svg?seed=$_seed',
+                fit: BoxFit.cover,
+                placeholderBuilder: (_) =>
+                    const Center(child: CupertinoActivityIndicator(radius: 8)),
+                errorBuilder: (_, error, stackTrace) => _fallback(),
+              )
+            : _fallback(),
       ),
     ),
+  );
+
+  Widget _fallback() => Icon(
+    CupertinoIcons.person_fill,
+    size: size * 0.5,
+    color: const Color(0xFF8E8E93),
   );
 }

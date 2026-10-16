@@ -6,6 +6,7 @@ import '../models/recommended_game.dart';
 import '../models/steam_game.dart';
 import '../repositories/game_repository.dart';
 import '../services/api_service.dart';
+import '../widgets/game_artwork.dart';
 import 'game_editor_page.dart';
 
 class RecommendedGamesPage extends StatefulWidget {
@@ -298,13 +299,7 @@ class GameCover extends StatelessWidget {
     aspectRatio: 460 / 215,
     child: url.isEmpty
         ? _placeholder()
-        : Image.network(
-            url,
-            fit: BoxFit.cover,
-            loadingBuilder: (_, child, progress) =>
-                progress == null ? child : _placeholder(),
-            errorBuilder: (_, error, stack) => _placeholder(),
-          ),
+        : GameArtwork(source: url, placeholder: _placeholder()),
   );
 
   Widget _placeholder() => const ColoredBox(

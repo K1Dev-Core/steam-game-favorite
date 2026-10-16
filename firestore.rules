@@ -17,22 +17,38 @@ service cloud.firestore {
 
       function validGame() {
         return request.resource.data.keys().hasAll([
-          'userId', 'appId', 'title', 'description', 'date', 'mood',
+          'userId', 'appId', 'title', 'description', 'date',
           'imageUrl', 'rating', 'updatedAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'userId', 'appId', 'title', 'description', 'date', 'mood',
-          'imageUrl', 'rating', 'createdAt', 'updatedAt'
+          'userId', 'appId', 'title', 'description', 'date', 'genre', 'mood',
+          'imageUrl', 'rating', 'isFavorite', 'createdAt', 'updatedAt'
         ])
+        && (request.resource.data.keys().hasAll(['genre'])
+          || request.resource.data.keys().hasAll(['mood']))
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 120
         && request.resource.data.description is string
         && request.resource.data.description.size() > 0
         && request.resource.data.description.size() <= 3000
+        && (!request.resource.data.keys().hasAll(['genre']) || (
+          request.resource.data.genre is string
+          && request.resource.data.genre.size() > 0
+          && request.resource.data.genre.size() <= 40
+        ))
+        && (!request.resource.data.keys().hasAll(['mood']) || (
+          request.resource.data.mood is string
+          && request.resource.data.mood.size() > 0
+          && request.resource.data.mood.size() <= 40
+        ))
+        && request.resource.data.imageUrl is string
+        && request.resource.data.imageUrl.size() <= 400000
         && request.resource.data.rating is number
         && request.resource.data.rating >= 0
-        && request.resource.data.rating <= 5;
+        && request.resource.data.rating <= 5
+        && (!request.resource.data.keys().hasAll(['isFavorite'])
+          || request.resource.data.isFavorite is bool);
       }
 
       allow create: if ownsIncomingGame() && validGame();

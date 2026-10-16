@@ -40,7 +40,8 @@ class RecommendedGame {
     description: description,
     imageUrl: imageUrl,
     date: DateTime.now().toIso8601String().split('T').first,
-    mood: 'มีความสุข',
+    mood: 'Action',
+    genre: 'Action',
     rating: 4,
   );
 }
