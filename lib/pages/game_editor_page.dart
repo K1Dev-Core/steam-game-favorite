@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import '../widgets/ios_navigation_bar.dart';
 import '../models/steam_game.dart';
@@ -38,6 +41,34 @@ class _GameEditorPageState extends State<GameEditorPage> {
   bool _saving = false;
   String? _error;
   final _picker = ImagePicker();
+
+  static const _maxImageBytes = 250000;
+
+  Uint8List? _compressImage(Uint8List sourceBytes) {
+    final decoded = img.decodeImage(sourceBytes);
+    if (decoded == null) return null;
+    final oriented = img.bakeOrientation(decoded);
+
+    for (final maxEdge in [960, 800, 680, 560, 448, 360, 288, 240]) {
+      final scale = math.min(
+        1.0,
+        maxEdge / math.max(oriented.width, oriented.height),
+      );
+      final resized = scale < 1
+          ? img.copyResize(
+              oriented,
+              width: (oriented.width * scale).round(),
+              height: (oriented.height * scale).round(),
+            )
+          : oriented;
+
+      for (final quality in [72, 58, 45, 34, 25]) {
+        final jpeg = img.encodeJpg(resized, quality: quality);
+        if (jpeg.length <= _maxImageBytes) return Uint8List.fromList(jpeg);
+      }
+    }
+    return null;
+  }
 
   static const _genres = [
     'Action',
@@ -127,30 +158,18 @@ class _GameEditorPageState extends State<GameEditorPage> {
     try {
       final file = await _picker.pickImage(
         source: source,
-        maxWidth: 720,
-        maxHeight: 720,
-        imageQuality: 40,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
       );
       if (file == null || !mounted) return;
-      final bytes = await file.readAsBytes();
-      if (bytes.length > 280000) {
-        setState(() => _error = 'รูปยังมีขนาดใหญ่ไป ลองเลือกรูปที่เล็กลง');
-        return;
-      }
-      final name = file.name.toLowerCase();
-      final mime =
-          file.mimeType ??
-          (name.endsWith('.png')
-              ? 'image/png'
-              : name.endsWith('.webp')
-              ? 'image/webp'
-              : 'image/jpeg');
-      if (!const {'image/jpeg', 'image/png', 'image/webp'}.contains(mime)) {
-        setState(() => _error = 'รองรับรูปแบบ JPEG, PNG และ WebP');
+      final bytes = _compressImage(await file.readAsBytes());
+      if (bytes == null) {
+        setState(() => _error = 'ปรับขนาดรูปไม่สำเร็จ กรุณาลองเลือกรูปอื่น');
         return;
       }
       setState(() {
-        _image.text = 'data:$mime;base64,${base64Encode(bytes)}';
+        _image.text = 'data:image/jpeg;base64,${base64Encode(bytes)}';
         _error = null;
       });
     } catch (_) {

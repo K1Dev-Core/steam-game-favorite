@@ -27,6 +27,7 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
   late final ApiService _api = widget.api ?? ApiService();
   late Future<List<RecommendedGame>> _future = _api.fetchGames();
   int _seed = 0;
+  int _shuffleTurns = 0;
   @override
   void dispose() {
     if (widget.api == null) _api.close();
@@ -35,6 +36,7 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
 
   void _reload() => setState(() {
     _seed = Random().nextInt(1 << 30);
+    _shuffleTurns++;
     _future = _api.fetchGames();
   });
 
@@ -79,7 +81,12 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
         CupertinoButton(
           padding: EdgeInsets.zero,
           onPressed: _reload,
-          child: const Icon(CupertinoIcons.shuffle, size: 23),
+          child: AnimatedRotation(
+            turns: _shuffleTurns.toDouble(),
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOut,
+            child: const Icon(CupertinoIcons.shuffle, size: 23),
+          ),
         ),
       ],
     ),
@@ -141,10 +148,25 @@ class _RecommendedGamesPageState extends State<RecommendedGamesPage> {
                     itemCount: order.length,
                     itemBuilder: (context, index) {
                       final game = order[index];
-                      return _GameCard(
-                        game: game,
-                        onAdd: () => _quickAdd(game),
-                        onDetail: () => _openDetail(game),
+                      return TweenAnimationBuilder<double>(
+                        key: ValueKey(game.appId),
+                        tween: Tween(begin: 0, end: 1),
+                        duration: Duration(
+                          milliseconds: 260 + (index.clamp(0, 4) * 40),
+                        ),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) => Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, 12 * (1 - value)),
+                            child: child,
+                          ),
+                        ),
+                        child: _GameCard(
+                          game: game,
+                          onAdd: () => _quickAdd(game),
+                          onDetail: () => _openDetail(game),
+                        ),
                       );
                     },
                   );

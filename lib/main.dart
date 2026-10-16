@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
@@ -33,6 +34,23 @@ const genres = [
   'อื่น ๆ',
 ];
 
+const genreIcons = [
+  CupertinoIcons.square_grid_2x2_fill,
+  CupertinoIcons.bolt_fill,
+  CupertinoIcons.map_fill,
+  CupertinoIcons.scope,
+  CupertinoIcons.shield_fill,
+  CupertinoIcons.flag_fill,
+  CupertinoIcons.building_2_fill,
+  CupertinoIcons.gear_solid,
+  CupertinoIcons.game_controller_solid,
+];
+
+IconData _genreIcon(String genre) {
+  final index = genres.indexOf(genre);
+  return genreIcons[index >= 0 ? index : genreIcons.length - 1];
+}
+
 const cardColors = [
   Color(0xFFEAF2FF),
   Color(0xFFE8F8F3),
@@ -63,7 +81,7 @@ class SteamFavoriteApp extends StatelessWidget {
         color: const Color(0xFFF2F2F7),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
+            constraints: BoxConstraints(maxWidth: kIsWeb ? 820 : 600),
             child: child!,
           ),
         ),
@@ -92,10 +110,12 @@ class SteamFavoriteApp extends StatelessWidget {
           ),
         ),
         cardTheme: CardThemeData(
-          elevation: 0,
+          elevation: 1,
+          shadowColor: const Color(0x120C1B33),
           color: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
+            side: const BorderSide(color: Color(0x0A15233B)),
           ),
         ),
         appBarTheme: const AppBarTheme(
@@ -232,6 +252,7 @@ class _MainPageState extends State<MainPage> {
       final games = snapshot.data ?? const <SteamGame>[];
       return GameListPage(
         games: _filteredGames(games),
+        allGames: games,
         totalCount: games.length,
         searchController: _searchController,
         onSearchChanged: (_) => setState(() {}),
@@ -306,6 +327,7 @@ class _MainPageState extends State<MainPage> {
 
 class GameListPage extends StatefulWidget {
   final List<SteamGame> games;
+  final List<SteamGame> allGames;
   final int totalCount;
   final TextEditingController searchController;
   final ValueChanged<String> onSearchChanged;
@@ -320,6 +342,7 @@ class GameListPage extends StatefulWidget {
   const GameListPage({
     super.key,
     required this.games,
+    required this.allGames,
     required this.totalCount,
     required this.searchController,
     required this.onSearchChanged,
@@ -337,6 +360,15 @@ class GameListPage extends StatefulWidget {
 }
 
 class _GameListPageState extends State<GameListPage> {
+  void _openStatistics() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameStatisticsPage(games: widget.allGames),
+      ),
+    );
+  }
+
   Widget _header(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,13 +380,44 @@ class _GameListPageState extends State<GameListPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'เกมโปรด',
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF4D9BFF), Color(0xFF0066E8)],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF007AFF,
+                              ).withValues(alpha: 0.2),
+                              blurRadius: 12,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.game_controller_solid,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'เกมโปรด',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.9,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 3),
                   Text(
@@ -373,8 +436,11 @@ class _GameListPageState extends State<GameListPage> {
               style: IconButton.styleFrom(
                 backgroundColor: const Color(0xFF007AFF),
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
               ),
-              icon: const Icon(CupertinoIcons.add),
+              icon: const Icon(CupertinoIcons.add, size: 23),
             ),
           ],
         ),
@@ -385,7 +451,10 @@ class _GameListPageState extends State<GameListPage> {
           onChanged: widget.onSearchChanged,
           decoration: InputDecoration(
             hintText: 'ค้นหาจากชื่อเกม',
-            prefixIcon: const Icon(CupertinoIcons.search),
+            prefixIcon: const Icon(
+              CupertinoIcons.search,
+              color: Color(0xFF007AFF),
+            ),
             suffixIcon: widget.searchController.text.isEmpty
                 ? null
                 : IconButton(
@@ -436,21 +505,10 @@ class _GameListPageState extends State<GameListPage> {
             itemBuilder: (context, index) {
               final genre = genres[index];
               final selected = genre == widget.selectedGenre;
-              const icons = [
-                CupertinoIcons.square_grid_2x2_fill,
-                CupertinoIcons.bolt_fill,
-                CupertinoIcons.map_fill,
-                CupertinoIcons.scope,
-                CupertinoIcons.shield_fill,
-                CupertinoIcons.flag_fill,
-                CupertinoIcons.building_2_fill,
-                CupertinoIcons.gear_solid,
-                CupertinoIcons.game_controller_solid,
-              ];
               return ChoiceChip(
                 showCheckmark: false,
                 avatar: Icon(
-                  icons[index],
+                  genreIcons[index],
                   size: 15,
                   color: selected ? Colors.white : const Color(0xFF007AFF),
                 ),
@@ -477,7 +535,48 @@ class _GameListPageState extends State<GameListPage> {
   Widget build(BuildContext context) {
     final itemCount = widget.games.isEmpty ? 2 : widget.games.length + 1;
     return Scaffold(
-      appBar: const IosNavigationBar(),
+      appBar: IosNavigationBar(
+        title: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF007AFF).withValues(alpha: 0.09),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                CupertinoIcons.game_controller_solid,
+                size: 14,
+                color: Color(0xFF007AFF),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${widget.totalCount} เกม',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF0067D8),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'ดูสถิติ',
+            onPressed: _openStatistics,
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
+              foregroundColor: const Color(0xFF007AFF),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+            ),
+            icon: const Icon(CupertinoIcons.chart_bar_fill),
+          ),
+        ],
+      ),
       body: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         itemCount: itemCount,
@@ -531,64 +630,112 @@ class _GameListPageState extends State<GameListPage> {
           final game = widget.games[gameIndex];
           final cardColor = cardColors[gameIndex % cardColors.length];
           final iconColor = iconColors[gameIndex % iconColors.length];
-          return Card(
-            color: Colors.white,
-            elevation: 0,
-            margin: const EdgeInsets.only(bottom: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
-              side: BorderSide(color: iconColor.withValues(alpha: 0.12)),
+          return TweenAnimationBuilder<double>(
+            key: ValueKey(game.id ?? game.title),
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(
+              milliseconds: 240 + (gameIndex.clamp(0, 4) * 35),
             ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(14),
-              leading: _GameThumbnail(url: game.imageUrl, iconColor: iconColor),
-              title: Text(
-                game.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) => Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 10 * (1 - value)),
+                child: child,
               ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      game.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                    const SizedBox(height: 7),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: cardColor,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            game.genre,
-                            style: TextStyle(
-                              color: iconColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+            ),
+            child: Card(
+              color: Colors.white,
+              elevation: 1,
+              shadowColor: iconColor.withValues(alpha: 0.1),
+              clipBehavior: Clip.antiAlias,
+              margin: const EdgeInsets.only(bottom: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+                side: BorderSide(color: iconColor.withValues(alpha: 0.12)),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(14),
+                leading: Hero(
+                  tag: 'game-art-${game.id ?? game.appId}',
+                  child: _GameThumbnail(
+                    url: game.imageUrl,
+                    iconColor: iconColor,
+                  ),
+                ),
+                title: Text(
+                  game.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        game.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              game.genre,
+                              style: TextStyle(
+                                color: iconColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          _StarRating(rating: game.rating, iconSize: 14),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (game.isFavorite) ...[
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEEF3),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        const SizedBox(width: 8),
-                        _StarRating(rating: game.rating, iconSize: 14),
-                      ],
+                        child: const Icon(
+                          CupertinoIcons.heart_fill,
+                          color: Color(0xFFE54779),
+                          size: 15,
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                    ],
+                    const Icon(
+                      CupertinoIcons.chevron_right,
+                      size: 17,
+                      color: Color(0xFF9AA3B2),
                     ),
                   ],
                 ),
+                onTap: () => widget.onGameTap(game),
               ),
-              trailing: const Icon(CupertinoIcons.chevron_right, size: 18),
-              onTap: () => widget.onGameTap(game),
             ),
           );
         },
@@ -606,10 +753,10 @@ class _GameThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: SizedBox(
-        width: 88,
-        height: 58,
+        width: 96,
+        height: 64,
         child: url.isEmpty
             ? _fallback()
             : GameArtwork(source: url, placeholder: _fallback(loading: true)),
@@ -619,7 +766,16 @@ class _GameThumbnail extends StatelessWidget {
 
   Widget _fallback({bool loading = false}) {
     return Container(
-      color: iconColor.withValues(alpha: 0.15),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            iconColor.withValues(alpha: 0.1),
+            iconColor.withValues(alpha: 0.22),
+          ],
+        ),
+      ),
       child: loading
           ? Center(
               child: SizedBox(
@@ -638,6 +794,407 @@ class _GameThumbnail extends StatelessWidget {
             ),
     );
   }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: animation, child: child),
+            ),
+            child: Text(
+              value,
+              key: ValueKey(value),
+              style: TextStyle(fontWeight: FontWeight.w700, color: color),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class GameStatisticsPage extends StatelessWidget {
+  const GameStatisticsPage({super.key, required this.games});
+
+  final List<SteamGame> games;
+
+  @override
+  Widget build(BuildContext context) {
+    final totals = <String, int>{};
+    for (final game in games) {
+      totals.update(game.genre, (count) => count + 1, ifAbsent: () => 1);
+    }
+    final categories = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final maxCount = categories.isEmpty ? 1 : categories.first.value;
+    final favoriteCount = games.where((game) => game.isFavorite).length;
+    final favoriteRatio = games.isEmpty ? 0.0 : favoriteCount / games.length;
+
+    return Scaffold(
+      appBar: IosNavigationBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              CupertinoIcons.chart_bar_fill,
+              size: 17,
+              color: Color(0xFF007AFF),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              'สถิติ',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 22, 18, 32),
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) => Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 10 * (1 - value)),
+                child: child,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF56A3FF), Color(0xFF0068E8)],
+                        ),
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF007AFF,
+                            ).withValues(alpha: 0.2),
+                            blurRadius: 12,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.chart_bar_fill,
+                        color: Colors.white,
+                        size: 23,
+                      ),
+                    ),
+                    const SizedBox(width: 13),
+                    const Expanded(
+                      child: Text(
+                        'สถิติเกมโปรด',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.8,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'ภาพรวมเกมและหมวดหมู่ในคลังของคุณ',
+                  style: TextStyle(color: CupertinoColors.secondaryLabel),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    _StatPill(
+                      icon: CupertinoIcons.square_grid_2x2_fill,
+                      label: 'เกมทั้งหมด',
+                      value: '${games.length}',
+                      color: const Color(0xFF007AFF),
+                    ),
+                    const SizedBox(width: 12),
+                    _StatPill(
+                      icon: CupertinoIcons.heart_fill,
+                      label: 'รายการโปรด',
+                      value: '$favoriteCount',
+                      color: const Color(0xFFE54779),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 17, 16, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'จำนวนเกมแยกตามหมวด',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF007AFF,
+                                ).withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${categories.length} หมวด',
+                                style: const TextStyle(
+                                  color: Color(0xFF007AFF),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        if (categories.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 22),
+                            child: Center(
+                              child: Text(
+                                'ยังไม่มีข้อมูลให้แสดง',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            ),
+                          )
+                        else
+                          for (var i = 0; i < categories.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 17),
+                            _AnimatedCategoryRow(
+                              key: ValueKey('stats-${categories[i].key}'),
+                              icon: _genreIcon(categories[i].key),
+                              label: categories[i].key,
+                              count: categories[i].value,
+                              fraction: categories[i].value / maxCount,
+                              color: iconColors[i % iconColors.length],
+                              delay: Duration(milliseconds: i * 75),
+                            ),
+                          ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              CupertinoIcons.heart_fill,
+                              size: 17,
+                              color: Color(0xFFE54779),
+                            ),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'สัดส่วนเกมโปรด',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Text('${(favoriteRatio * 100).round()}%'),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: favoriteRatio),
+                          duration: const Duration(milliseconds: 850),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, value, _) => ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: value,
+                              minHeight: 9,
+                              color: const Color(0xFFE54779),
+                              backgroundColor: const Color(0xFFF2F2F7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedCategoryRow extends StatefulWidget {
+  const _AnimatedCategoryRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.fraction,
+    required this.color,
+    required this.delay,
+  });
+
+  final IconData icon;
+  final String label;
+  final int count;
+  final double fraction;
+  final Color color;
+  final Duration delay;
+
+  @override
+  State<_AnimatedCategoryRow> createState() => _AnimatedCategoryRowState();
+}
+
+class _AnimatedCategoryRowState extends State<_AnimatedCategoryRow> {
+  bool _animate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(widget.delay, () {
+      if (mounted) setState(() => _animate = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 132,
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(widget.icon, size: 14, color: widget.color),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: SizedBox(
+            height: 10,
+            child: ColoredBox(
+              color: const Color(0xFFF2F2F7),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: _animate ? widget.fraction : 0),
+                duration: const Duration(milliseconds: 720),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: value.clamp(0, 1),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(7),
+                        gradient: LinearGradient(
+                          colors: [
+                            widget.color.withValues(alpha: 0.6),
+                            widget.color,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      SizedBox(
+        width: 34,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(scale: animation, child: child),
+          ),
+          child: Text(
+            '${widget.count}',
+            key: ValueKey(widget.count),
+            textAlign: TextAlign.end,
+            style: TextStyle(color: widget.color, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _StarRating extends StatelessWidget {
@@ -744,7 +1301,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
         children: [
-          _DetailImage(url: game.imageUrl),
+          Hero(
+            tag: 'game-art-${game.id ?? game.appId}',
+            child: _DetailImage(url: game.imageUrl),
+          ),
           const SizedBox(height: 22),
           Text(
             game.title,

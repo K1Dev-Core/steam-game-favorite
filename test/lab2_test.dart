@@ -51,6 +51,8 @@ void main() {
     await tester.pumpWidget(SteamFavoriteApp(repository: repository));
     await tester.pumpAndSettle();
     expect(find.text('0 เกมที่บันทึกบน Cloud'), findsOneWidget);
+    expect(find.text('0 เกม'), findsOneWidget);
+    expect(find.text('สรุปคลังเกม'), findsNothing);
     await tester.tap(find.byTooltip('เพิ่มเกมใหม่'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('gameTitle')), 'Palworld');
@@ -62,7 +64,18 @@ void main() {
     await tester.tap(find.text('บันทึก'));
     await tester.pumpAndSettle();
     expect(find.text('1 เกมที่บันทึกบน Cloud'), findsOneWidget);
+    await tester.tap(find.byTooltip('ดูสถิติ'));
+    await tester.pumpAndSettle();
+    expect(find.text('สถิติเกมโปรด'), findsOneWidget);
+    expect(find.text('Action'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(repository.games.single.userId, 'test-user');
+    await tester.scrollUntilVisible(
+      find.text('Palworld'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Palworld'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('แก้ไขเกม'));
