@@ -34,6 +34,7 @@ const sourceFiles = [
   ['android/app/build.gradle.kts','application id, SDK/build settings และ Firebase plugin ของ Android','ตั้งค่าที่จำเป็นต่อการ build APK'],
   ['ios/Runner/AppDelegate.swift','entry point native iOS และ register Flutter plugins','เชื่อม UIKit/Flutter lifecycle ก่อนเริ่ม Dart app'],
   ['ios/Runner/Info.plist','ชื่อ/สิทธิ์/metadata ของ iOS app','ตรวจ usage description ก่อนใช้ camera/photo picker'],
+  ['ios/Runner/Info-Debug.plist','สิทธิ์ Local Network/Bonjour สำหรับ Flutter VM service เฉพาะ Debug build','ใช้กับ hot reload ตอนพัฒนา; Release ใช้ Info.plist ปกติ'],
   ['ios/Runner.xcodeproj/project.pbxproj','การตั้งค่า target, signing, bundle identifier และ build configuration','Xcode ใช้ไฟล์นี้ตอน build/run บนอุปกรณ์'],
 ];
 

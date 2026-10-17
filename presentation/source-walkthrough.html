@@ -38,17 +38,23 @@
       <p class="eyebrow">02 · เข้าแอปและสลับหน้า</p><h2>เริ่มจาก <code>main()</code> แล้วผ่าน AuthGate</h2>
       <p><a class="file-ref" href="../lib/main.dart">lib/main.dart</a> เป็นจุดเริ่มโปรแกรมและประกอบหน้าแอป หลัง initialize Firebase แล้ว AuthGate ฟังสถานะ login: ยังไม่ login แสดง AuthPage; มีบัญชีแล้วสร้าง MainPage พร้อม repository ที่รู้ UID</p>
       <pre><code>Future&lt;void&gt; main() async {
+  // ผูก Flutter กับ native engine เพื่อให้เรียก plugin ได้ก่อน runApp
   WidgetsFlutterBinding.ensureInitialized();
+  // รอ Firebase พร้อม และเลือก config ให้ตรงกับ iOS/Android/Web
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // เริ่มวาด widget หลักหลัง Firebase พร้อมแล้ว
   runApp(const SteamFavoriteApp());
 }
 
-// AuthGate ตัดสินใจจาก authStateChanges()
+// ตัวอย่างย่อจาก AuthGate: ฟังสถานะ login ที่เปลี่ยนแบบ stream
+// ไม่มีผู้ใช้ = ส่งไปหน้าล็อกอิน; มีผู้ใช้ = เข้าแอปพร้อม repository
 if (snapshot.data == null) return AuthPage(auth: _auth);
 return MainPage(
+  // repository จะใช้ UID ของผู้ใช้จัดขอบเขตข้อมูล
   repository: FirestoreGameRepository(auth: _auth),
+  // ส่ง User ต่อให้หน้า About/เมนูโปรไฟล์ใช้แสดงข้อมูล
   user: snapshot.data,
 );</code></pre>
       <ul><li><code>ensureInitialized()</code> เตรียม Flutter engine ก่อนเรียก plugin ใน <code>main</code></li><li><code>await</code> รอ Firebase พร้อมก่อนสร้าง widget ที่ต้องใช้ Firebase</li><li><code>IndexedStack</code> กับ CupertinoTabBar สลับแท็บ แต่รักษา state ของหน้าเดิม</li></ul>
@@ -58,11 +64,15 @@ return MainPage(
       <p class="eyebrow">03 · เกมโปรดและฟอร์ม</p><h2>แตะรายการ → ส่ง Model → เปิดรายละเอียด</h2>
       <p>ใน <a class="file-ref" href="../lib/main.dart">lib/main.dart</a> เมธอด <code>_openDetail</code> ส่ง object <code>SteamGame</code> ผ่าน constructor ของหน้าใหม่ด้วย Navigator/MaterialPageRoute ข้อมูลที่มีอยู่จึงแสดงได้ทันที</p>
       <pre><code>Future&lt;void&gt; _openDetail(SteamGame game) async {
+  // เปิดหน้าถัดไปและรอจนผู้ใช้ย้อนกลับ
   await Navigator.push(
     context,
+    // กำหนดเส้นทางแบบ Material ให้ Flutter สร้าง GameDetailPage
     MaterialPageRoute(
       builder: (_) =&gt; GameDetailPage(
+        // ส่ง object เกมทั้งก้อนผ่าน constructor ไม่ต้องค้น DB ซ้ำ
         game: game,
+        // ส่ง repository เพื่อให้หน้ารายละเอียดแก้/ลบข้อมูลได้
         repository: widget.repository,
       ),
     ),
@@ -79,19 +89,24 @@ return MainPage(
       <div class="crud-grid"><div><b>GET</b><code>getDiaries()</code><span>อ่านรายการทั้งหมดจากกล่อง แล้วกรองให้ตรงเกมนี้</span></div><div><b>POST</b><code>createDiary(review)</code><span>สร้างรีวิวใหม่เมื่อเกมนี้ยังไม่มีรีวิว</span></div><div><b>PUT</b><code>updateDiary(review)</code><span>แก้รายการเดิมด้วย id ที่ API คืนให้</span></div><div><b>DELETE</b><code>deleteDiary(id)</code><span>ลบหลังผู้ใช้ยืนยันใน dialog</span></div></div>
       <h3>จุดโค้ดที่ควรไล่อธิบาย</h3>
       <pre><code>// lib/services/diary_api_service.dart
+// รหัสนี้ต่อท้าย URL เพื่อแยกกล่องข้อมูลของนักศึกษา
 static const studentId = '67011212055';
+// endpoint หลักที่ใช้ร่วมกันสำหรับ CRUD รีวิว
 static const defaultEndpoint =
   'https://thipwimon.comsciproject.net/mydiary/api.php/$studentId';
 
+// POST สร้างรีวิวใหม่ โดยแปลง model เป็น JSON ส่งใน request body
 Future&lt;void&gt; createDiary(GameReview review) async {
   await _send('POST', _baseUri, body: review.toJson());
 }
 
+// PUT แก้รีวิวเดิม โดยใส่ id ต่อท้าย URL เพื่อชี้รายการเป้าหมาย
 Future&lt;void&gt; updateDiary(GameReview review) async {
   await _send('PUT', Uri.parse('$endpoint/${review.id}'),
     body: review.toJson());
 }
 
+// DELETE ลบรายการตาม id; _send ตรวจ status และโยน error หากไม่สำเร็จ
 Future&lt;void&gt; deleteDiary(String id) async {
   await _send('DELETE', Uri.parse('$endpoint/$id'));
 }</code></pre>
@@ -110,9 +125,11 @@ Future&lt;void&gt; deleteDiary(String id) async {
       <p class="eyebrow">06 · Model และการแปลงข้อมูล</p><h2>ข้อมูลหนึ่งชุด แต่อาจต้องแปลงหลายรูปแบบ</h2>
       <p><a class="file-ref" href="../lib/models/steam_game.dart">SteamGame</a> เป็น model เกมโปรดหลัก ใช้ field เช่น title, description, genre, imageUrl, rating, isFavorite และ userId ส่วน <code>toFirestore/fromFirestore</code>, <code>toJson/fromJson</code>, <code>toMap/fromMap</code> จัดการโครงสร้างปลายทางแต่ละแบบ</p>
       <pre><code>// SQLite ไม่มีชนิด boolean โดยตรงในรูปแบบนี้
+// จึงแปลง true/false เป็นเลข 1/0 ตอนเขียนลงตาราง
 'isFavorite': isFavorite ? 1 : 0,
 
 // JSON / Firestore เก็บ boolean ได้โดยตรง
+// ไม่ต้องแปลง; model รับค่า true/false ได้เลย
 'isFavorite': isFavorite,</code></pre>
       <p><a class="file-ref" href="../lib/models/recommended_game.dart">RecommendedGame</a> คือข้อมูลเกมที่เพิ่งมาจาก API ก่อนบันทึกเป็นรายการโปรด · <a class="file-ref" href="../lib/models/backlog_game.dart">BacklogGame</a> คือเกมที่อยากเล่น · <a class="file-ref" href="../lib/models/game_comment.dart">GameComment</a> คือคอมเมนต์ในชุมชน · <a class="file-ref" href="../lib/models/game_review.dart">GameReview</a> คือรีวิวส่วนตัวที่ API เก็บ</p>
     </section>
@@ -121,13 +138,18 @@ Future&lt;void&gt; deleteDiary(String id) async {
       <p class="eyebrow">07 · Authentication และข้อมูล Cloud</p><h2>UID กับ ID token ใช้คนละหน้าที่</h2>
       <p><a class="file-ref" href="../lib/pages/auth_page.dart">auth_page.dart</a> จัดการหน้าล็อกอิน/สมัครบัญชี; <a class="file-ref" href="../lib/services/firestore_game_repository.dart">firestore_game_repository.dart</a> อ่าน UID จาก FirebaseAuth เพื่อแยกข้อมูล แล้วขอ ID token เพื่อยืนยันคำขอกับ Favorites API</p>
       <pre><code>String get _userId {
+  // อ่าน UID จาก Firebase Auth ของ session ปัจจุบัน
   final id = _auth.currentUser?.uid;
+  // ปฏิเสธการเรียกข้อมูลถ้ายังไม่มีผู้ใช้ล็อกอิน
   if (id == null) throw StateError('ผู้ใช้ยังไม่ได้เข้าสู่ระบบ');
+  // ส่ง UID กลับไปใช้ระบุเจ้าของรายการ
   return id;
 }
 
+// ขอ Firebase ID token เพื่อแนบ Authorization: Bearer ให้ REST API
 Future&lt;String&gt; get _idToken async =&gt;
   await _auth.currentUser?.getIdToken() ??
+  // ถ้า session หมดอายุ/ไม่มีผู้ใช้ ให้ส่ง error แทนเรียก API เปล่า ๆ
   (throw StateError('กรุณาเข้าสู่ระบบใหม่'));</code></pre>
       <p>ส่วน <a class="file-ref" href="../lib/services/favorites_api_service.dart">favorites_api_service.dart</a> แนบ <code>Authorization: Bearer &lt;ID token&gt;</code> ทุก request และส่ง GET/POST/PUT/DELETE ไป backend ของรายการโปรด การซ่อนข้อมูลด้วย filter ในแอปอย่างเดียวไม่ใช่ security; server และ Firestore Rules ต้องตรวจสิทธิ์ด้วย</p>
     </section>
