@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="คู่มือไล่การทำงานและอ่าน source code ของ Steam Favorite พร้อมลิงก์ไฟล์จริงและโค้ดเต็ม">
+  <title>ไล่โค้ดทุกส่วน · Steam Favorite</title>
+  <link rel="stylesheet" href="source-walkthrough.css">
+  <script src="source-walkthrough.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">SF <span>Steam Favorite<small>คู่มืออ่าน source code</small></span></a>
+    <nav><a href="index.html">คู่มือหลัก</a><a href="field-notes.html">สมุดโน้ต</a><a href="annotated-code.html">โค้ดคอมเมนต์ + Q&amp;A</a><button onclick="window.print()">พิมพ์ / PDF</button></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">SOURCE WALKTHROUGH · ฉบับอ้างอิงไฟล์จริง</p>
+      <h1>ไล่การทำงาน<br><span>จากหน้าจอไปถึงข้อมูล</span></h1>
+      <p class="lead">คู่มืออ่านและพรีเซนต์ Steam Favorite แบบเปิดเทียบซอร์สได้ทันที อธิบายว่าไฟล์ไหนรับผิดชอบอะไร ข้อมูลเดินทางอย่างไร และจุดสำคัญในโค้ดหมายถึงอะไร</p>
+      <div class="identity"><b>วชิรวิทย์ วงค์แสง</b><span>67011212055</span><span>Flutter · Firebase · REST API · SQLite</span></div>
+      <div class="hero-actions"><a href="#flows">เริ่มจากแผนภาพการทำงาน ↓</a><a class="quiet" href="#files">เปิดสารบัญไฟล์ ↓</a></div>
+    </section>
+
+    <section id="flows" class="section">
+      <p class="eyebrow">01 · ภาพรวมระบบ</p><h2>ข้อมูลแต่ละชนิดเดินคนละเส้นทาง</h2>
+      <p class="intro">แอปนี้มีข้อมูลหลายแบบ อย่าอธิบายรวมว่า “ทุกอย่างอยู่ SQLite” เพราะเกมโปรด รีวิวเกม และเกมที่อยากเล่นใช้แหล่งเก็บต่างกัน</p>
+      <div class="flow-grid">
+        <article class="flow-card"><span class="tag blue">เกมโปรด</span><h3>เพิ่ม / อ่าน / แก้ / ลบเกม</h3><div class="flow">ผู้ใช้แตะหน้าจอ<br>↓<br><b>GameDetailPage / GameEditorPage</b><br>↓<br><b>GameRepository</b><br>↓<br>REST API + Firebase ID token<br>↓<br>Cloud data<br>↓<br>SQLite cache (มือถือ) / Web adapter</div><p>หน้าเกมอ่าน Stream จาก repository; ได้ cache เดิมก่อน แล้วฟังข้อมูล Cloud ต่อ การเพิ่ม/แก้/ลบส่ง server ก่อน จากนั้นอัปเดต cache</p></article>
+        <article class="flow-card"><span class="tag purple">รีวิวของฉัน</span><h3>บันทึกในหน้ารายละเอียดเกม</h3><div class="flow">เปิดเกมโปรด<br>↓<br><b>GameReviewSection</b><br>GET กล่อง API ของรหัสนักศึกษา<br>↓<br>จับคู่ appId (หรือชื่อเกมเดิม)<br>↓<br>POST เพิ่ม · PUT แก้ · DELETE ลบ<br>↓<br>GET ใหม่เพื่อแสดงข้อมูลล่าสุด</div><p>รีวิวอยู่ในส่วนท้ายของรายละเอียดเกม ไม่มีแท็บใหม่ แยกรายการตามเกมด้วย Steam App ID และเก็บบน server จึงโหลดคืนได้หลังปิดแอป</p></article>
+        <article class="flow-card"><span class="tag green">Backlog</span><h3>เกมที่อยากเล่นภายหลัง</h3><div class="flow">BacklogPage<br>↓<br>GameDatabase interface<br>↙　　　　　↘<br>sqflite มือถือ　SharedPreferences เว็บ</div><p>เป็นข้อมูล local ต่ออุปกรณ์/เบราว์เซอร์ ไม่ใช่รีวิว API และไม่ซิงก์ข้ามเครื่อง</p></article>
+        <article class="flow-card"><span class="tag orange">ค้นพบเกม</span><h3>ข้อมูลแนะนำจาก API</h3><div class="flow">RecommendedGamesPage<br>↓ Future&lt;List&gt;<br>ApiService.fetchGames()<br>↓ GET API<br>JSON → RecommendedGame<br>↓<br>FutureBuilder แสดง Loading / Error / Empty / Data</div><p>เมื่อเลือกเกมไปเก็บเป็นเกมโปรด จะส่ง draft ผ่าน constructor ไปยังฟอร์มเกม ไม่ได้สร้างรายการโปรดทันที</p></article>
+      </div>
+      <div class="callout"><b>หลักจำง่าย:</b> UI รับผิดชอบการแสดงผล · Model กำหนดหน้าตาข้อมูล · Service คุยกับ API · Repository รวมการทำงานกับ Cloud/cache · Database adapter เก็บข้อมูล local ตาม platform</div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">02 · เข้าแอปและสลับหน้า</p><h2>เริ่มจาก <code>main()</code> แล้วผ่าน AuthGate</h2>
+      <p><a class="file-ref" href="../lib/main.dart">lib/main.dart</a> เป็นจุดเริ่มโปรแกรมและประกอบหน้าแอป หลัง initialize Firebase แล้ว AuthGate ฟังสถานะ login: ยังไม่ login แสดง AuthPage; มีบัญชีแล้วสร้าง MainPage พร้อม repository ที่รู้ UID</p>
+      <pre><code>Future&lt;void&gt; main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const SteamFavoriteApp());
+}
+
+// AuthGate ตัดสินใจจาก authStateChanges()
+if (snapshot.data == null) return AuthPage(auth: _auth);
+return MainPage(
+  repository: FirestoreGameRepository(auth: _auth),
+  user: snapshot.data,
+);</code></pre>
+      <ul><li><code>ensureInitialized()</code> เตรียม Flutter engine ก่อนเรียก plugin ใน <code>main</code></li><li><code>await</code> รอ Firebase พร้อมก่อนสร้าง widget ที่ต้องใช้ Firebase</li><li><code>IndexedStack</code> กับ CupertinoTabBar สลับแท็บ แต่รักษา state ของหน้าเดิม</li></ul>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">03 · เกมโปรดและฟอร์ม</p><h2>แตะรายการ → ส่ง Model → เปิดรายละเอียด</h2>
+      <p>ใน <a class="file-ref" href="../lib/main.dart">lib/main.dart</a> เมธอด <code>_openDetail</code> ส่ง object <code>SteamGame</code> ผ่าน constructor ของหน้าใหม่ด้วย Navigator/MaterialPageRoute ข้อมูลที่มีอยู่จึงแสดงได้ทันที</p>
+      <pre><code>Future&lt;void&gt; _openDetail(SteamGame game) async {
+  await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) =&gt; GameDetailPage(
+        game: game,
+        repository: widget.repository,
+      ),
+    ),
+  );
+}</code></pre>
+      <p><a class="file-ref" href="../lib/pages/game_editor_page.dart">lib/pages/game_editor_page.dart</a> มี TextFormField และ validator; Dropdown/Slider หรือ widget เลือกค่าอัปเดต state ก่อนประกอบเป็น <code>SteamGame</code> แล้วเรียก <code>repository.saveGame</code> ส่วนการลบมี dialog ยืนยันก่อนเรียก <code>deleteGame</code></p>
+      <div class="callout">ถ้าการเขียนสำเร็จ service คืนเกมที่ server ตอบกลับมา แล้ว repository บันทึก cache ต่อ หาก API ล้มเหลว UI จะแสดง error และไม่ทำเหมือนว่าบันทึกสำเร็จ</div>
+    </section>
+
+    <section id="review" class="section review-section">
+      <p class="eyebrow">04 · ฟีเจอร์รีวิวรายเกม · CRUD API</p><h2>รีวิวอยู่ในหน้ารายละเอียด ไม่ใช่หน้าแยก</h2>
+      <p><a class="file-ref" href="../lib/widgets/game_review_section.dart">lib/widgets/game_review_section.dart</a> วาดการ์ด “รีวิวของฉัน” ต่อท้ายข้อมูลเกม มีช่องข้อความตรวจห้ามว่างและ Slider ให้คะแนน 0–5 ดาว เมื่อโหลดหน้าจะ GET รายการจาก server แล้วเลือกรีวิวที่มี <code>appId</code> ตรงกัน ถ้าเป็นข้อมูลรุ่นเก่าที่ไม่มี appId จะลองเทียบชื่อเกม</p>
+      <div class="endpoint"><b>กล่องข้อมูลของนักศึกษา</b><code>https://thipwimon.comsciproject.net/mydiary/api.php/67011212055</code><small>ส่งฟิลด์ title, content, mood (คะแนน), date และ appId · ไม่ต้องใส่ cleartext traffic เพราะเป็น HTTPS</small></div>
+      <div class="crud-grid"><div><b>GET</b><code>getDiaries()</code><span>อ่านรายการทั้งหมดจากกล่อง แล้วกรองให้ตรงเกมนี้</span></div><div><b>POST</b><code>createDiary(review)</code><span>สร้างรีวิวใหม่เมื่อเกมนี้ยังไม่มีรีวิว</span></div><div><b>PUT</b><code>updateDiary(review)</code><span>แก้รายการเดิมด้วย id ที่ API คืนให้</span></div><div><b>DELETE</b><code>deleteDiary(id)</code><span>ลบหลังผู้ใช้ยืนยันใน dialog</span></div></div>
+      <h3>จุดโค้ดที่ควรไล่อธิบาย</h3>
+      <pre><code>// lib/services/diary_api_service.dart
+static const studentId = '67011212055';
+static const defaultEndpoint =
+  'https://thipwimon.comsciproject.net/mydiary/api.php/$studentId';
+
+Future&lt;void&gt; createDiary(GameReview review) async {
+  await _send('POST', _baseUri, body: review.toJson());
+}
+
+Future&lt;void&gt; updateDiary(GameReview review) async {
+  await _send('PUT', Uri.parse('$endpoint/${review.id}'),
+    body: review.toJson());
+}
+
+Future&lt;void&gt; deleteDiary(String id) async {
+  await _send('DELETE', Uri.parse('$endpoint/$id'));
+}</code></pre>
+      <p>เมธอดทั้งสี่ใช้ <code>http.Request</code>, JSON header, timeout 15 วินาที และตรวจ HTTP status 2xx หากล้มเหลวจะแปลงเป็น <code>DiaryApiException</code> เพื่อให้ UI แจ้งผู้ใช้ได้ ส่วน <a class="file-ref" href="../lib/models/game_review.dart">lib/models/game_review.dart</a> แปลง JSON ↔ object และอ่านได้ทั้ง <code>id</code> กับ <code>_id</code> จาก response</p>
+      <div class="callout success"><b>ยืนยันการทำงานกับ endpoint จริง:</b> POST 201 · PUT 200 · DELETE 200 รายการที่ใช้ตรวจเป็นรายการชั่วคราวและลบออกหลังทดสอบแล้ว ไม่ได้แก้ไขข้อมูลเดิม</div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">05 · API อื่นในแอป</p><h2>FutureBuilder ไม่ทำให้หน้าจอค้าง</h2>
+      <p><a class="file-ref" href="../lib/services/api_service.dart">lib/services/api_service.dart</a> โหลดเกมแนะนำและคอมเมนต์ ส่วน <a class="file-ref" href="../lib/pages/recommended_games_page.dart">recommended_games_page.dart</a> และ <a class="file-ref" href="../lib/pages/community_page.dart">community_page.dart</a> ใช้ FutureBuilder แยกสถานะการโหลด</p>
+      <div class="state-grid"><div><b>Waiting</b><span>แสดง CupertinoActivityIndicator</span></div><div><b>Has error</b><span>อธิบายข้อผิดพลาดและปุ่มลองใหม่</span></div><div><b>Empty</b><span>API สำเร็จแต่ไม่มีรายการ แยกจาก error</span></div><div><b>Data</b><span>parse JSON เป็น model แล้วสร้างรายการ UI</span></div></div>
+      <p>รูปเกมใช้ widget ใน <a class="file-ref" href="../lib/widgets/game_artwork.dart">game_artwork.dart</a> เพื่อแสดง placeholder ตอนโหลดและ fallback เมื่อ URL ใช้ไม่ได้ รูปโปรไฟล์อยู่ใน <a class="file-ref" href="../lib/widgets/profile_avatar.dart">profile_avatar.dart</a></p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">06 · Model และการแปลงข้อมูล</p><h2>ข้อมูลหนึ่งชุด แต่อาจต้องแปลงหลายรูปแบบ</h2>
+      <p><a class="file-ref" href="../lib/models/steam_game.dart">SteamGame</a> เป็น model เกมโปรดหลัก ใช้ field เช่น title, description, genre, imageUrl, rating, isFavorite และ userId ส่วน <code>toFirestore/fromFirestore</code>, <code>toJson/fromJson</code>, <code>toMap/fromMap</code> จัดการโครงสร้างปลายทางแต่ละแบบ</p>
+      <pre><code>// SQLite ไม่มีชนิด boolean โดยตรงในรูปแบบนี้
+'isFavorite': isFavorite ? 1 : 0,
+
+// JSON / Firestore เก็บ boolean ได้โดยตรง
+'isFavorite': isFavorite,</code></pre>
+      <p><a class="file-ref" href="../lib/models/recommended_game.dart">RecommendedGame</a> คือข้อมูลเกมที่เพิ่งมาจาก API ก่อนบันทึกเป็นรายการโปรด · <a class="file-ref" href="../lib/models/backlog_game.dart">BacklogGame</a> คือเกมที่อยากเล่น · <a class="file-ref" href="../lib/models/game_comment.dart">GameComment</a> คือคอมเมนต์ในชุมชน · <a class="file-ref" href="../lib/models/game_review.dart">GameReview</a> คือรีวิวส่วนตัวที่ API เก็บ</p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">07 · Authentication และข้อมูล Cloud</p><h2>UID กับ ID token ใช้คนละหน้าที่</h2>
+      <p><a class="file-ref" href="../lib/pages/auth_page.dart">auth_page.dart</a> จัดการหน้าล็อกอิน/สมัครบัญชี; <a class="file-ref" href="../lib/services/firestore_game_repository.dart">firestore_game_repository.dart</a> อ่าน UID จาก FirebaseAuth เพื่อแยกข้อมูล แล้วขอ ID token เพื่อยืนยันคำขอกับ Favorites API</p>
+      <pre><code>String get _userId {
+  final id = _auth.currentUser?.uid;
+  if (id == null) throw StateError('ผู้ใช้ยังไม่ได้เข้าสู่ระบบ');
+  return id;
+}
+
+Future&lt;String&gt; get _idToken async =&gt;
+  await _auth.currentUser?.getIdToken() ??
+  (throw StateError('กรุณาเข้าสู่ระบบใหม่'));</code></pre>
+      <p>ส่วน <a class="file-ref" href="../lib/services/favorites_api_service.dart">favorites_api_service.dart</a> แนบ <code>Authorization: Bearer &lt;ID token&gt;</code> ทุก request และส่ง GET/POST/PUT/DELETE ไป backend ของรายการโปรด การซ่อนข้อมูลด้วย filter ในแอปอย่างเดียวไม่ใช่ security; server และ Firestore Rules ต้องตรวจสิทธิ์ด้วย</p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">08 · SQLite และ platform</p><h2>มือถือกับเว็บเลือก storage adapter คนละตัว</h2>
+      <p><a class="file-ref" href="../lib/data/game_database.dart">game_database.dart</a> กำหนด interface และ conditional import · <a class="file-ref" href="../lib/data/game_database_sqflite.dart">game_database_sqflite.dart</a> ใช้ sqflite บน iOS/Android · <a class="file-ref" href="../lib/data/game_database_web.dart">game_database_web.dart</a> ใช้ SharedPreferences บนเว็บ · <a class="file-ref" href="../lib/data/game_database_stub.dart">game_database_stub.dart</a> แจ้ง unsupported บน platform อื่น</p>
+      <p><a class="file-ref" href="../lib/pages/backlog_page.dart">backlog_page.dart</a> ใช้ local database นี้สำหรับ CRUD ของ Backlog; database version migration สร้างตาราง backlog โดยไม่แทนตารางเกมเดิม</p>
+      <div class="callout warning"><b>พูดตรงข้อเท็จจริง:</b> รีวิวเก็บบน REST server · เกมโปรดเป็น Cloud/Firestore พร้อม SQLite cache · Backlog เป็น local storage · เว็บใช้ adapter ของ browser ไม่ใช่ sqflite จริง</div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">09 · กราฟและสถิติ</p><h2>สถิติคำนวณจากเกมโปรดที่โหลดได้</h2>
+      <p><a class="file-ref" href="../lib/main.dart">GameStatisticsPage ใน main.dart</a> นับเกมตาม <code>genre</code> แล้ววาด donut ด้วย CustomPainter ส่วน ChoiceChip เลือก “ทั้งหมด” หรือหมวดเดียวได้; เมื่อเลือกหมวด วงแหวนแบ่งเกมโปรดกับเกมอื่นในหมวด และรายการด้านล่างกรองเหลือหมวดนั้น</p>
+      <p>การวาดกราฟแปลงจำนวนแต่ละกลุ่มเป็นสัดส่วนของผลรวม แล้วใช้ <code>canvas.drawArc</code> วาด segment ต่อกันรอบวง</p>
+    </section>
+
+    <section id="files" class="section">
+      <p class="eyebrow">10 · สารบัญ source พร้อมโค้ดเต็ม</p><h2>เปิดไฟล์จริง อ่าน หรือดาวน์โหลด</h2>
+      <p class="intro">เปิดแถบของไฟล์เพื่อดึง source code ปัจจุบันจากโปรเจกต์มาแสดงตรงนี้ กด “ดาวน์โหลดไฟล์” เพื่อเก็บต้นฉบับ หรือ “คัดลอกโค้ด” เพื่อวางใน editor แล้วค้นตาม symbol ที่อธิบายไว้ข้างไฟล์</p>
+      <label class="search"><span>⌕</span><input id="fileSearch" type="search" placeholder="ค้นชื่อไฟล์หรือหน้าที่…"></label>
+      <div id="fileList" class="file-list"></div>
+      <p id="fileStatus" class="status" aria-live="polite"></p>
+    </section>
+
+    <section class="section final-note">
+      <p class="eyebrow">จำไว้ตอนตอบอาจารย์</p><h2>อธิบายเป็นลำดับเดียวกันทุกฟีเจอร์</h2>
+      <p><b>ผู้ใช้ทำอะไร → widget ไหนรับ event → model หน้าตาอย่างไร → service/repository ส่งไปไหน → data กลับมาแล้ว UI เปลี่ยนอย่างไร → ถ้าล้มเหลวแสดงอะไร</b></p>
+      <p>คู่มือนี้มี source path ให้กดเปิดเทียบทุกจุด โค้ดเต็มในส่วนท้ายโหลดจากไฟล์จริง ไม่ใช่โค้ดตัวอย่างที่พิมพ์ซ้ำ</p>
+      <div class="links"><a href="field-notes.html">← สมุดโน้ตทุกไฟล์</a><a href="annotated-code.html">อ่านโค้ดคอมเมนต์ + คำถามตอบ →</a></div>
+    </section>
+  </main>
+  <footer>Steam Favorite · Source walkthrough · 67011212055</footer>
+</body>
+</html>

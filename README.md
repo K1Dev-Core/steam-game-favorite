@@ -31,7 +31,7 @@ flutter pub get
 flutter build apk --release
 ```
 
-ไฟล์ APK จะอยู่ที่ `build/app/outputs/flutter-apk/app-release.apk` ส่วนไอคอนต้นฉบับอยู่ที่ `assets/icon.png` และ `assets/icon.svg`
+ไฟล์ APK จะอยู่ที่ `build/app/outputs/flutter-apk/app-release.apk` ส่วนไอคอนต้นฉบับที่ใช้สร้างไอคอนแอปอยู่ที่ `assets/icon.png`
 
 ## การจัดเก็บข้อมูล
 

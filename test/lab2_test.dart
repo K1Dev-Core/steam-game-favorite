@@ -64,11 +64,14 @@ void main() {
     await tester.tap(find.text('บันทึก'));
     await tester.pumpAndSettle();
     expect(find.text('1 เกมที่บันทึกบน Cloud'), findsOneWidget);
-    await tester.tap(find.byTooltip('ดูสถิติ'));
+    await tester.tap(find.text('สถิติ').last);
     await tester.pumpAndSettle();
     expect(find.text('สถิติเกมโปรด'), findsOneWidget);
-    expect(find.text('Action'), findsOneWidget);
-    await tester.pageBack();
+    expect(find.byKey(const Key('stats-filter-Action')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('stats-filter-Action')));
+    await tester.pumpAndSettle();
+    expect(find.text('เกมโปรด'), findsWidgets);
+    await tester.tap(find.text('เกมโปรด').last);
     await tester.pumpAndSettle();
     expect(repository.games.single.userId, 'test-user');
     await tester.scrollUntilVisible(

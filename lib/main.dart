@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
+import 'data/game_database.dart';
 import 'models/steam_game.dart';
 import 'pages/auth_page.dart';
+import 'pages/backlog_page.dart';
 import 'pages/community_page.dart';
 import 'pages/game_editor_page.dart';
 import 'pages/recommended_games_page.dart';
@@ -15,6 +17,7 @@ import 'services/firestore_game_repository.dart';
 import 'widgets/ios_navigation_bar.dart';
 import 'widgets/profile_avatar.dart';
 import 'widgets/game_artwork.dart';
+import 'widgets/game_review_section.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -221,6 +224,18 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
+  Future<void> _openBacklog() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BacklogPage(
+          database: createGameDatabase(),
+          ownerId: widget.user?.uid ?? 'local-preview',
+        ),
+      ),
+    );
+  }
+
   Widget _cloudGameList() => StreamBuilder<List<SteamGame>>(
     stream: widget.repository.watchGames(),
     builder: (context, snapshot) {
@@ -252,7 +267,6 @@ class _MainPageState extends State<MainPage> {
       final games = snapshot.data ?? const <SteamGame>[];
       return GameListPage(
         games: _filteredGames(games),
-        allGames: games,
         totalCount: games.length,
         searchController: _searchController,
         onSearchChanged: (_) => setState(() {}),
@@ -267,7 +281,22 @@ class _MainPageState extends State<MainPage> {
         onGenreChanged: (value) => setState(() => _selectedGenre = value),
         onGameTap: _openDetail,
         onAdd: _addGame,
+        onBacklog: _openBacklog,
       );
+    },
+  );
+
+  Widget _cloudStatistics() => StreamBuilder<List<SteamGame>>(
+    stream: widget.repository.watchGames(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting &&
+          !snapshot.hasData) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (snapshot.hasError) {
+        return const Center(child: Text('โหลดสถิติไม่สำเร็จ กรุณาลองใหม่'));
+      }
+      return GameStatisticsPage(games: snapshot.data ?? const <SteamGame>[]);
     },
   );
 
@@ -290,6 +319,7 @@ class _MainPageState extends State<MainPage> {
             },
           ),
           const CommunityPage(),
+          _cloudStatistics(),
           AboutPage(user: widget.user, onSignOut: widget.onSignOut),
         ],
       ),
@@ -315,6 +345,11 @@ class _MainPageState extends State<MainPage> {
             label: 'ชุมชน',
           ),
           BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chart_bar),
+            activeIcon: Icon(CupertinoIcons.chart_bar_fill),
+            label: 'สถิติ',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.person_crop_circle),
             activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
             label: 'เกี่ยวกับ',
@@ -327,7 +362,6 @@ class _MainPageState extends State<MainPage> {
 
 class GameListPage extends StatefulWidget {
   final List<SteamGame> games;
-  final List<SteamGame> allGames;
   final int totalCount;
   final TextEditingController searchController;
   final ValueChanged<String> onSearchChanged;
@@ -338,11 +372,11 @@ class GameListPage extends StatefulWidget {
   final ValueChanged<String> onGenreChanged;
   final ValueChanged<SteamGame> onGameTap;
   final VoidCallback onAdd;
+  final VoidCallback onBacklog;
 
   const GameListPage({
     super.key,
     required this.games,
-    required this.allGames,
     required this.totalCount,
     required this.searchController,
     required this.onSearchChanged,
@@ -353,6 +387,7 @@ class GameListPage extends StatefulWidget {
     required this.onGenreChanged,
     required this.onGameTap,
     required this.onAdd,
+    required this.onBacklog,
   });
 
   @override
@@ -360,15 +395,6 @@ class GameListPage extends StatefulWidget {
 }
 
 class _GameListPageState extends State<GameListPage> {
-  void _openStatistics() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => GameStatisticsPage(games: widget.allGames),
-      ),
-    );
-  }
-
   Widget _header(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,6 +455,11 @@ class _GameListPageState extends State<GameListPage> {
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: 'เกมที่อยากเล่น — บันทึกในเครื่อง',
+              onPressed: widget.onBacklog,
+              icon: const Icon(CupertinoIcons.bookmark),
             ),
             IconButton.filled(
               tooltip: 'เพิ่มเกมใหม่',
@@ -562,20 +593,6 @@ class _GameListPageState extends State<GameListPage> {
             ],
           ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'ดูสถิติ',
-            onPressed: _openStatistics,
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
-              foregroundColor: const Color(0xFF007AFF),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(13),
-              ),
-            ),
-            icon: const Icon(CupertinoIcons.chart_bar_fill),
-          ),
-        ],
       ),
       body: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
@@ -847,20 +864,65 @@ class _StatPill extends StatelessWidget {
   );
 }
 
-class GameStatisticsPage extends StatelessWidget {
+class GameStatisticsPage extends StatefulWidget {
   const GameStatisticsPage({super.key, required this.games});
 
   final List<SteamGame> games;
 
   @override
+  State<GameStatisticsPage> createState() => _GameStatisticsPageState();
+}
+
+class _GameStatisticsPageState extends State<GameStatisticsPage> {
+  String _selectedGenre = 'ทั้งหมด';
+
+  @override
   Widget build(BuildContext context) {
+    final games = widget.games;
     final totals = <String, int>{};
     for (final game in games) {
       totals.update(game.genre, (count) => count + 1, ifAbsent: () => 1);
     }
     final categories = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final maxCount = categories.isEmpty ? 1 : categories.first.value;
+    final availableGenres = [
+      'ทั้งหมด',
+      ...categories.map((entry) => entry.key),
+    ];
+    if (!availableGenres.contains(_selectedGenre)) _selectedGenre = 'ทั้งหมด';
+    final selectedGames = _selectedGenre == 'ทั้งหมด'
+        ? games
+        : games.where((game) => game.genre == _selectedGenre).toList();
+    final displayCategories = _selectedGenre == 'ทั้งหมด'
+        ? categories
+        : categories.where((entry) => entry.key == _selectedGenre).toList();
+    final maxCount = displayCategories.isEmpty
+        ? 1
+        : displayCategories.first.value;
+    final chartSegments = _selectedGenre == 'ทั้งหมด'
+        ? categories
+              .asMap()
+              .entries
+              .map(
+                (entry) => _ChartSegment(
+                  label: entry.value.key,
+                  value: entry.value.value,
+                  color: iconColors[entry.key % iconColors.length],
+                ),
+              )
+              .toList()
+        : [
+            _ChartSegment(
+              label: 'เกมโปรด',
+              value: selectedGames.where((game) => game.isFavorite).length,
+              color: const Color(0xFFE54779),
+            ),
+            _ChartSegment(
+              label: 'เกมอื่นในหมวดนี้',
+              value: selectedGames.where((game) => !game.isFavorite).length,
+              color: const Color(0xFFB8C1CC),
+            ),
+          ].where((segment) => segment.value > 0).toList();
     final favoriteCount = games.where((game) => game.isFavorite).length;
     final favoriteRatio = games.isEmpty ? 0.0 : favoriteCount / games.length;
 
@@ -976,7 +1038,7 @@ class GameStatisticsPage extends StatelessWidget {
                           children: [
                             const Expanded(
                               child: Text(
-                                'จำนวนเกมแยกตามหมวด',
+                                'สัดส่วนเกมตามหมวด',
                                 style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
@@ -992,7 +1054,7 @@ class GameStatisticsPage extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
-                                '${categories.length} หมวด',
+                                '${selectedGames.length} เกม',
                                 style: const TextStyle(
                                   color: Color(0xFF007AFF),
                                   fontSize: 12,
@@ -1002,8 +1064,152 @@ class GameStatisticsPage extends StatelessWidget {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'เลือกหมวดหมู่เพื่อดูกราฟเฉพาะหมวดนั้น',
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 10),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (
+                                var i = 0;
+                                i < availableGenres.length;
+                                i++
+                              ) ...[
+                                if (i > 0) const SizedBox(width: 8),
+                                ChoiceChip(
+                                  key: ValueKey(
+                                    'stats-filter-${availableGenres[i]}',
+                                  ),
+                                  label: Text(availableGenres[i]),
+                                  selected:
+                                      availableGenres[i] == _selectedGenre,
+                                  onSelected: (_) => setState(
+                                    () => _selectedGenre = availableGenres[i],
+                                  ),
+                                  selectedColor: const Color(
+                                    0xFF007AFF,
+                                  ).withValues(alpha: 0.13),
+                                  side: BorderSide.none,
+                                  showCheckmark: false,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 190,
+                          child: chartSegments.isEmpty
+                              ? const Center(
+                                  child: Text('ยังไม่มีข้อมูลให้แสดง'),
+                                )
+                              : Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 180,
+                                      height: 180,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          CustomPaint(
+                                            size: const Size(180, 180),
+                                            painter: _DonutChartPainter(
+                                              chartSegments,
+                                            ),
+                                          ),
+                                          Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                '${selectedGames.length}',
+                                                style: const TextStyle(
+                                                  fontSize: 27,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              Text(
+                                                _selectedGenre == 'ทั้งหมด'
+                                                    ? 'เกมทั้งหมด'
+                                                    : _selectedGenre,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          for (final segment in chartSegments)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 5,
+                                                  ),
+                                              child: Row(
+                                                children: [
+                                                  Container(
+                                                    width: 9,
+                                                    height: 9,
+                                                    decoration: BoxDecoration(
+                                                      color: segment.color,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 7),
+                                                  Expanded(
+                                                    child: Text(
+                                                      segment.label,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '${segment.value}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Divider(height: 1),
+                        const SizedBox(height: 14),
+                        const Text(
+                          'จำนวนเกม',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
                         const SizedBox(height: 18),
-                        if (categories.isEmpty)
+                        if (displayCategories.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 22),
                             child: Center(
@@ -1014,14 +1220,20 @@ class GameStatisticsPage extends StatelessWidget {
                             ),
                           )
                         else
-                          for (var i = 0; i < categories.length; i++) ...[
+                          for (
+                            var i = 0;
+                            i < displayCategories.length;
+                            i++
+                          ) ...[
                             if (i > 0) const SizedBox(height: 17),
                             _AnimatedCategoryRow(
-                              key: ValueKey('stats-${categories[i].key}'),
-                              icon: _genreIcon(categories[i].key),
-                              label: categories[i].key,
-                              count: categories[i].value,
-                              fraction: categories[i].value / maxCount,
+                              key: ValueKey(
+                                'stats-${displayCategories[i].key}',
+                              ),
+                              icon: _genreIcon(displayCategories[i].key),
+                              label: displayCategories[i].key,
+                              count: displayCategories[i].value,
+                              fraction: displayCategories[i].value / maxCount,
                               color: iconColors[i % iconColors.length],
                               delay: Duration(milliseconds: i * 75),
                             ),
@@ -1080,6 +1292,43 @@ class GameStatisticsPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ChartSegment {
+  const _ChartSegment({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final String label;
+  final int value;
+  final Color color;
+}
+
+class _DonutChartPainter extends CustomPainter {
+  const _DonutChartPainter(this.segments);
+  final List<_ChartSegment> segments;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = segments.fold<int>(0, (sum, segment) => sum + segment.value);
+    if (total == 0) return;
+    final rect = Offset.zero & size;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 22
+      ..strokeCap = StrokeCap.butt;
+    var start = -1.57079632679;
+    for (final segment in segments) {
+      final sweep = segment.value / total * 6.28318530718;
+      paint.color = segment.color;
+      canvas.drawArc(rect.deflate(14), start, sweep, false, paint);
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutChartPainter oldDelegate) => true;
 }
 
 class _AnimatedCategoryRow extends StatefulWidget {
@@ -1365,6 +1614,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
             'Steam App ID: ${game.appId}',
             style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
+          GameReviewSection(game: game),
         ],
       ),
     );

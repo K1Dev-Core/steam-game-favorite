@@ -2,6 +2,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/steam_game.dart';
+import '../models/backlog_game.dart';
 import 'game_database.dart';
 
 GameDatabase createGameDatabase() => _SqfliteGameDatabase();
@@ -15,8 +16,9 @@ class _SqfliteGameDatabase implements GameDatabase {
     final root = await getDatabasesPath();
     return openDatabase(
       path.join(root, 'steam_favorites.db'),
-      version: 1,
-      onCreate: (database, version) => database.execute('''
+      version: 2,
+      onCreate: (database, version) async {
+        await database.execute('''
         CREATE TABLE steam_games (
           id TEXT PRIMARY KEY,
           userId TEXT NOT NULL,
@@ -29,9 +31,27 @@ class _SqfliteGameDatabase implements GameDatabase {
           rating REAL NOT NULL,
           isFavorite INTEGER NOT NULL DEFAULT 1
         )
-      '''),
+      ''');
+        await database.execute(_createBacklogTable);
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) await database.execute(_createBacklogTable);
+      },
     );
   }
+
+  static const _createBacklogTable = '''
+    CREATE TABLE backlog_games (
+      id TEXT PRIMARY KEY,
+      ownerId TEXT NOT NULL,
+      title TEXT NOT NULL,
+      appId TEXT NOT NULL DEFAULT '',
+      genre TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      createdAt TEXT NOT NULL
+    )
+  ''';
 
   @override
   Future<List<SteamGame>> readGames(String userId) async {
@@ -80,6 +100,35 @@ class _SqfliteGameDatabase implements GameDatabase {
       'steam_games',
       where: 'userId = ? AND id = ?',
       whereArgs: [userId, id],
+    );
+  }
+
+  @override
+  Future<List<BacklogGame>> readBacklog(String ownerId) async {
+    final rows = await (await database).query(
+      'backlog_games',
+      where: 'ownerId = ?',
+      whereArgs: [ownerId],
+      orderBy: 'createdAt DESC, title COLLATE NOCASE ASC',
+    );
+    return rows.map(BacklogGame.fromMap).toList();
+  }
+
+  @override
+  Future<void> saveBacklog(BacklogGame game) async {
+    await (await database).insert(
+      'backlog_games',
+      game.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> deleteBacklog(String ownerId, String id) async {
+    await (await database).delete(
+      'backlog_games',
+      where: 'ownerId = ? AND id = ?',
+      whereArgs: [ownerId, id],
     );
   }
 }

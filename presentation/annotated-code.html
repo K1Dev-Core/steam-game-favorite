@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="ตัวอย่างโค้ดจริงพร้อมคอมเมนต์อธิบายและชุดคำถามตอบ Steam Favorite">
+  <title>โค้ดอธิบายและถามตอบ | Steam Favorite</title>
+  <link rel="stylesheet" href="notes.css">
+  <link rel="stylesheet" href="code-notes.css">
+</head>
+<body>
+  <header class="toolbar">
+    <a href="field-notes.html">← กลับสมุดโน้ต</a><span>โค้ดมีคอมเมนต์ + คำถามตอบ</span><a href="source-walkthrough.html">ไล่โค้ด + source เต็ม</a>
+    <div>
+      <input id="search" type="search" placeholder="ค้นหาเนื้อหา…"><button onclick="window.print()">พิมพ์ /
+      PDF</button>
+    </div>
+  </header>
+  <main class="notebook">
+    <section class="cover sheet">
+      <p class="kicker">ANNOTATED SOURCE · ORAL EXAM NOTES</p>
+      <h1>โค้ดสำคัญ<br>
+      <em>พร้อมคำอธิบาย</em></h1>
+      <p class="lead">อ่านโค้ดแล้วเข้าใจว่าทำไมแต่ละส่วนอยู่ตรงนั้น และซ้อมตอบคำถามโดยอ้างอิงการทำงานจริงของแอป</p>
+      <div class="identity">
+        Steam Favorite <b>วชิรวิทย์ วงค์แสง</b><span>67011212055</span>
+      </div>
+      <div class="cover-meta">
+        <span>ตัวอย่างตัดเฉพาะจุดสำคัญจาก source
+        จริง</span><span>มีคอมเมนต์อธิบายข้างโค้ด</span><span>กดพิมพ์เพื่อบันทึก PDF</span>
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">01 · BOOTSTRAP</p>
+      <h2>เริ่มแอปและเชื่อม Firebase</h2>
+      <p>ไฟล์ <code>lib/main.dart</code> เตรียม Flutter binding และ Firebase ก่อนสร้าง widget root เพื่อไม่ให้ widget
+      ที่ใช้ Firebase เริ่มก่อน initialization เสร็จ</p>
+      <pre class="annotated"><code>Future&lt;void&gt; main() async {
+  // ต้องเตรียม Flutter engine ก่อนเรียก plugin จาก main()
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // ใช้ค่า config ให้ตรง platform ปัจจุบัน (Android/iOS/Web)
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // เริ่มแสดง UI หลัง Firebase พร้อมใช้งานแล้ว
+  runApp(const SteamFavoriteApp());
+}</code></pre>
+      <div class="margin-note">
+        <b>พูดว่า:</b> main เป็น async เพราะ Firebase initialization ใช้เวลาและคืน Future; await
+        ทำให้แอปเริ่มหลังตั้งค่าเสร็จ
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">02 · MODEL &amp; SERIALIZATION</p>
+      <h2>Model กลางและการแปลงข้อมูล</h2>
+      <p>อ้างอิง <code>lib/models/steam_game.dart</code> Model เดียวกันใช้กับ SQLite, REST JSON และ Firestore
+      แต่ต้องแปลง boolean ต่างกันตามรูปแบบปลายทาง</p>
+      <pre class="annotated"><code>class SteamGame {
+  final String? id;       // null = ยังไม่มี id จากการบันทึก
+  final String userId;     // เจ้าของข้อมูล; มาจากบัญชีที่ยืนยันแล้ว
+  final String title;
+  final String genre;
+  final double rating;
+  final bool isFavorite;
+
+  // SQLite ต้องเก็บ bool เป็น integer 0/1
+  Map&lt;String, Object?&gt; toMap({String? userId}) =&gt; {
+    'id': id,
+    'userId': userId ?? this.userId,
+    'title': title,
+    'genre': genre,
+    'rating': rating,
+    'isFavorite': isFavorite ? 1 : 0,
+  };
+
+  // REST JSON/Firestore ใช้ boolean จริง ไม่ใช่เลข 0/1
+  Map&lt;String, Object?&gt; toJson() =&gt; {
+    'id': id,
+    'userId': userId,
+    'title': title,
+    'genre': genre,
+    'rating': rating,
+    'isFavorite': isFavorite,
+  };
+}</code></pre>
+      <div class="lined">
+        <b>จำง่าย:</b> <code>toMap/fromMap</code> ใช้กับแถว local; <code>toJson/fromJson</code> ใช้กับ HTTP;
+        <code>toFirestore/fromFirestore</code> แปลง Firestore document โดยอ่าน document id จาก Firestore metadata
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">03 · PLATFORM ADAPTER</p>
+      <h2>เลือกฐานข้อมูลตาม platform</h2>
+      <p>ไฟล์ <code>lib/data/game_database.dart</code> ใช้ conditional import: build เลือก sqflite บน native, web
+      adapter บน browser และ stub บน platform ที่ยังไม่รองรับ</p>
+      <pre class="annotated"><code>import 'game_database_stub.dart'
+    // dart:io ใช้กับ Android/iOS/desktop: SQLite ผ่าน sqflite
+    if (dart.library.io) 'game_database_sqflite.dart'
+    // browser ใช้ adapter ของเว็บ ไม่เรียก native sqflite
+    if (dart.library.js_interop) 'game_database_web.dart'
+    as platform;
+
+abstract interface class GameDatabase {
+  // UI/repository เรียกสัญญาเดียว ไม่ต้องรู้ platform
+  Future&lt;List&lt;SteamGame&gt;&gt; readGames(String userId);
+  Future&lt;void&gt; saveGame(SteamGame game);
+  Future&lt;void&gt; deleteGame(String userId, String id);
+}</code></pre>
+      <div class="margin-note">
+        <b>ทำไมมี stub?</b> ทำให้ import graph มี implementation สำหรับ platform ที่ไม่รองรับจริง และแจ้ง unsupported
+        อย่างชัดเจนแทน import พัง
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">04 · SQLITE</p>
+      <h2>สร้างตารางและ query แบบแยกผู้ใช้</h2>
+      <p>อ้างอิง <code>lib/data/game_database_sqflite.dart</code> คำสั่ง query แยก owner ผ่าน whereArgs ไม่ต่อ userId
+      ลงใน SQL string</p>
+      <pre class="annotated"><code>CREATE TABLE steam_games (
+  id TEXT PRIMARY KEY,       -- key ของเอกสารเกม
+  userId TEXT NOT NULL,      -- ใช้แบ่งแถว cache ตามบัญชี
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  rating REAL NOT NULL,
+  isFavorite INTEGER NOT NULL DEFAULT 1
+);
+
+final rows = await db.query(
+  'steam_games',
+  where: 'userId = ?',       // ? เป็น placeholder ของค่า
+  whereArgs: [userId],       // driver bind ค่าอย่างปลอดภัย
+  orderBy: 'date DESC',
+);
+return rows.map(SteamGame.fromMap).toList();</code></pre>
+      <p>การแทน cache ใช้ transaction: ลบเฉพาะแถว user ปัจจุบันแล้ว batch insert รายการล่าสุด หาก batch ล้มเหลว
+      transaction ยกเลิกได้ ไม่ทิ้ง cache ครึ่งชุด</p>
+      <div class="warning">
+        SQLite เป็น local cache; ดู source-of-truth และลำดับ remote/local ในหัวข้อ Repository ด้านล่าง
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">05 · REPOSITORY</p>
+      <h2>เชื่อม Cloud กับ cache</h2>
+      <p>อ้างอิง <code>lib/services/firestore_game_repository.dart</code> repository ทำให้ UI เรียก watch/save/delete
+      โดยไม่รู้ขั้นตอน HTTP และ local DB ทั้งหมด</p>
+      <pre class="annotated"><code>Stream&lt;List&lt;SteamGame&gt;&gt; watchGames() async* {
+  final userId = _userId; // อ่าน UID จาก Firebase Auth
+  yield await _database.readGames(userId); // แสดง cache ก่อน
+
+  try {
+    final token = await _idToken; // credential ของ session ปัจจุบัน
+    final latest = await _api.getGames(token); // Cloud/API เป็นข้อมูลหลัก
+    await _database.replaceGames(userId, latest); // refresh local copy
+    yield await _database.readGames(userId); // ส่งข้อมูลใหม่ให้ UI
+  } catch (_) {
+    // ถ้า refresh ไม่สำเร็จ อย่างน้อยผู้ใช้ยังเห็น cache เดิม
+  }
+
+  // Firestore stream ทำให้รายการอัปเดต real-time
+  await for (final snapshot in _games
+      .where('userId', isEqualTo: userId).snapshots()) {
+    final games = snapshot.docs.map(SteamGame.fromFirestore).toList();
+    await _database.replaceGames(userId, games);
+    yield await _database.readGames(userId);
+  }
+}</code></pre>
+      <div class="margin-note">
+        <b>ข้อจำกัดต้องพูดตรง:</b> save/delete เรียก API ก่อน แล้วค่อยแก้ SQLite; ออฟไลน์จึงไม่มี write queue
+        สำหรับซิงก์ภายหลัง
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">06 · FORM + CRUD</p>
+      <h2>ตรวจฟอร์ม ป้องกันกดซ้ำ และส่งกลับ</h2>
+      <p>อ้างอิง <code>lib/pages/game_editor_page.dart</code></p>
+      <pre class="annotated"><code>Future&lt;void&gt; _save() async {
+  // กัน tap ซ้ำ และ validate ทุก field ก่อนทำ side effect
+  if (_saving || !_formKey.currentState!.validate()) return;
+
+  setState(() {
+    _saving = true; // UI แสดงสถานะกำลังบันทึก
+    _error = null;
+  });
+
+  try {
+    final saved = await widget.repository.saveGame(
+      SteamGame(
+        id: widget.game?.id, // มี id = แก้ไข; null = สร้างใหม่
+        title: _title.text.trim(), // trim ตัดช่องว่างหัว/ท้าย
+        description: _description.text.trim(),
+        // field อื่น ๆ เช่น genre, rating, imageUrl, favorite
+      ),
+    );
+
+    // await อาจใช้เวลานาน ตรวจว่า State ยังอยู่ก่อนใช้ context
+    if (mounted) Navigator.pop(context, saved); // ส่งผลกลับหน้าก่อน
+  } catch (_) {
+    if (mounted) setState(() {
+      _saving = false;
+      _error = 'บันทึกไม่สำเร็จ กรุณาลองใหม่';
+    });
+  }
+}</code></pre>
+      <pre class="annotated"><code>validator: (value) =&gt;
+    value == null || value.trim().isEmpty
+        ? 'กรุณากรอกชื่อเกม' // ข้อความแสดงใต้ช่อง
+        : null,              // null หมายถึงผ่าน validation</code></pre>
+      <p><b>C/R/U/D:</b> Create ใช้ POST, Read ใช้ GET/stream, Update ใช้ PUT โดยส่ง id เดิม, Delete แสดง dialog
+      ยืนยันก่อน DELETE</p>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">07 · FILTER + NAVIGATION</p>
+      <h2>กรองรายการและเปิดรายละเอียด</h2>
+      <p>อ้างอิง <code>lib/main.dart</code> เงื่อนไขทั้งสามต้องจริงพร้อมกัน จึงใช้ AND</p>
+      <pre class="annotated"><code>List&lt;SteamGame&gt; _filteredGames(List&lt;SteamGame&gt; games) {
+  return games.where((game) {
+    final genreMatches =
+        _selectedGenre == 'ทั้งหมด' || game.genre == _selectedGenre;
+    final favoriteMatches = !_favoritesOnly || game.isFavorite;
+    final titleMatches = game.title.toLowerCase().contains(
+      _searchController.text.trim().toLowerCase(),
+    );
+
+    // เฉพาะเกมที่ผ่านทุก filter จะแสดง
+    return genreMatches &amp;&amp; favoriteMatches &amp;&amp; titleMatches;
+  }).toList();
+}
+
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    // ส่ง object เกมเข้า constructor ไม่ต้อง query ใหม่
+    builder: (_) =&gt; GameDetailPage(game: game, repository: repository),
+  ),
+);</code></pre>
+      <p><code>CupertinoTabBar</code> เรียก <code>setState</code> เปลี่ยน selected index; <code>IndexedStack</code>
+      แสดง child ตาม index และรักษา state ของหน้าแท็บที่ซ่อนไว้</p>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">08 · FUTUREBUILDER + HTTP</p>
+      <h2>แยก Loading, Error, Empty, Data</h2>
+      <p>ใน <code>lib/pages/recommended_games_page.dart</code> เก็บ Future ใน State เพื่อไม่ยิง request ใหม่ทุกครั้งที่
+      widget rebuild</p>
+      <pre class="annotated"><code>FutureBuilder&lt;List&lt;RecommendedGame&gt;&gt;(
+  future: _future, // Future ปัจจุบัน; retry จะกำหนดตัวใหม่
+  builder: (context, snapshot) {
+    if (snapshot.connectionState != ConnectionState.done) {
+      return const CupertinoActivityIndicator(); // กำลังรอ
+    }
+    if (snapshot.hasError) {
+      return _Status(
+        title: 'โหลดเกมไม่สำเร็จ',
+        onRetry: _reload, // สั่ง request ใหม่
+      );
+    }
+
+    final games = snapshot.data ?? [];
+    if (games.isEmpty) {
+      return _Status(title: 'ยังไม่มีเกมแนะนำ'); // empty ไม่ใช่ error
+    }
+
+    final order = [...games]..shuffle(Random(_seed)); // สุ่มลำดับเมื่อผู้ใช้เปลี่ยน seed
+    return ListView.builder(
+      itemCount: order.length, // จำนวนแถวให้ตรงกับรายการ
+      itemBuilder: (context, index) {
+        final game = order[index]; // สร้างเฉพาะแถวที่กำลังแสดง
+        return _GameCard(
+          game: game,
+          onAdd: () => _quickAdd(game), // เพิ่มเกมนี้เข้า library
+          onDetail: () => _openDetail(game), // เปิดรายละเอียดจาก model นี้
+        );
+      },
+    );
+  },
+)</code></pre>
+      <p>Service ใช้ timeout และตรวจ HTTP status; JSON ที่ไม่ตรง schema หรือ status ไม่ใช่ 2xx จะกลายเป็น error ให้ UI
+      แสดง feedback</p>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">09 · AUTHENTICATED REST</p>
+      <h2>แนบ token และอย่าเชื่อ owner จาก body</h2>
+      <p>อ้างอิง <code>lib/services/favorites_api_service.dart</code> client ใส่ Firebase ID token ใน Authorization
+      header</p>
+      <pre class="annotated"><code>http.Request(method, uri)
+  ..headers.addAll({
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    // server ใช้ token เพื่อยืนยัน session และหา UID
+    'Authorization': 'Bearer $idToken',
+  })
+  ..body = body ?? '';
+
+if (response.statusCode &lt; 200 || response.statusCode &gt;= 300) {
+  // แปลง status/error ให้ UI จัดการแบบเดียวกัน
+  throw ApiException('บันทึกข้อมูลไม่สำเร็จ');
+}</code></pre>
+      <p>ฝั่ง <code>games-api/api/favorites.js</code> แยกตาม HTTP method, validate field, จำกัดความยาว id, แล้ว forward
+      token ไป Firestore REST API ให้ Firestore ตรวจ Rules ด้วย</p>
+      <pre class="annotated"><code>const owner = ownerFromToken(req);
+if (!owner) return replyError(res, 401, 'กรุณาเข้าสู่ระบบใหม่');
+
+// owner.uid มาจาก claim; query ผูก userId กับผู้ใช้ปัจจุบัน
+const query = {
+  structuredQuery: {
+    from: [{collectionId: 'games'}],
+    where: {fieldFilter: {
+      field: {fieldPath: 'userId'},
+      op: 'EQUAL',
+      value: {stringValue: owner.uid},
+    }},
+  },
+};
+
+// คำขอ downstream ยังส่ง token เดิมให้ Firestore
+Authorization: `Bearer ${owner.token}`</code></pre>
+      <div class="warning">
+        <b>ความแม่นยำด้านความปลอดภัย:</b> handler อ่าน claim เพื่อสร้าง owner/query แต่การ decode payload
+        เพียงอย่างเดียวไม่ใช่การ verify signature; Firestore ต้องยืนยัน token และบังคับ Rules เองอีกชั้น API key ของ
+        Firebase ไม่ใช่ server secret และห้ามเอา service-account private key มาใส่ client
+      </div>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">10 · FIRESTORE RULES</p>
+      <h2>ตรวจทั้งเจ้าของเดิมและข้อมูลใหม่</h2>
+      <p>กติกาจริงอยู่ใน <code>firestore.rules</code>; การกรอง query ใน UI ไม่ทดแทน Rules</p>
+      <pre class="annotated"><code>function ownsExistingGame() {
+  // resource = document ปัจจุบันในฐานข้อมูล
+  return request.auth != null
+      &amp;&amp; resource.data.userId == request.auth.uid;
+}
+
+function ownsIncomingGame() {
+  // request.resource = ค่าที่กำลังจะเขียน
+  return request.auth != null
+      &amp;&amp; request.resource.data.userId == request.auth.uid;
+}
+
+allow create: if ownsIncomingGame() &amp;&amp; validGame();
+allow read, delete: if ownsExistingGame();
+allow update: if ownsExistingGame()
+              &amp;&amp; ownsIncomingGame()
+              // ห้ามเปลี่ยน owner ระหว่าง update
+              &amp;&amp; request.resource.data.userId == resource.data.userId
+              &amp;&amp; validGame();</code></pre>
+      <p>validGame ตรวจ keys ที่อนุญาต, title/description ไม่ว่างและไม่เกินขนาด, rating อยู่ 0–5, imageUrl มีขนาดจำกัด
+      และ isFavorite เป็น boolean; path อื่น default deny</p>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">11 · IMAGE + STATS + TEST</p>
+      <h2>รูปภาพ กราฟ และการทดสอบ</h2>
+      <pre class="annotated"><code>// lib/pages/game_editor_page.dart
+final oriented = img.bakeOrientation(decoded); // เคารพ EXIF orientation
+for (final maxEdge in [960, 800, 680, 560, 448, 360, 288, 240]) {
+  final scale = math.min(
+    1.0,
+    maxEdge / math.max(oriented.width, oriented.height),
+  ); // ไม่ขยายภาพเล็กกว่าขนาดเป้าหมาย
+  final resized = scale < 1
+      ? img.copyResize(
+          oriented,
+          width: (oriented.width * scale).round(),
+          height: (oriented.height * scale).round(),
+        )
+      : oriented; // ใช้ภาพเดิมหากไม่ต้องย่อ
+  for (final quality in [72, 58, 45, 34, 25]) {
+    final jpeg = img.encodeJpg(resized, quality: quality);
+    if (jpeg.length &lt;= 250000) return jpeg; // จำกัด payload
+  }
+}</code></pre>
+      <pre class="annotated"><code>// สรุปสถิติจาก list ปัจจุบัน
+final totals = &lt;String, int&gt;{};
+for (final game in games) {
+  totals.update(game.genre, (count) =&gt; count + 1,
+      ifAbsent: () =&gt; 1); // เจอครั้งแรกเริ่มนับ 1
+}
+final favoriteCount =
+    games.where((game) =&gt; game.isFavorite).length;</code></pre>
+      <p><code>test/api_test.dart</code> ทดสอบ API/UI states; <code>test/lab2_test.dart</code> ทดสอบ CRUD ผ่าน fake
+      repository; <code>test/widget_test.dart</code> ทดสอบ widget ขั้นพื้นฐาน การทดสอบไม่แทนการลอง Firebase/API
+      จริง</p>
+    </section>
+    <section class="sheet chapter">
+      <p class="kicker">12 · Q&amp;A PRACTICE</p>
+      <h2>คำถาม–คำตอบซ้อมพรีเซนต์</h2>
+      <p>พยายามตอบด้วยภาษาตัวเอง แล้วชี้ไฟล์หรือสาธิตหลักฐานจริงประกอบ</p>
+      <div class="qa">
+        <details>
+          <summary>
+            แอปนี้แก้ปัญหาอะไร?
+          </summary>
+          <p>ช่วยรวบรวมเกมที่สนใจไว้ในบัญชีเดียว เพิ่มรายละเอียด หมวด คะแนน และรูปได้ พร้อมดูเกมแนะนำและสรุปสถิติ</p>
+        </details>
+        <details>
+          <summary>
+            ทำไมเลือก Flutter?
+          </summary>
+          <p>เขียน UI ด้วย Dart ชุดเดียวและนำไป build Android, iOS และ Web ได้ โดยใช้ widget และ plugin ตาม
+          platform</p>
+        </details>
+        <details>
+          <summary>
+            StatefulWidget กับ setState ใช้ตรงไหน?
+          </summary>
+          <p>ใช้กับค่าที่เปลี่ยนระหว่างใช้งาน เช่น tab, ตัวกรอง, ฟอร์ม และสถานะ loading; เรียก setState เพื่อให้
+          framework สร้าง UI ใหม่</p>
+        </details>
+        <details>
+          <summary>
+            Model SteamGame มี field อะไรและทำไมต้องมี?
+          </summary>
+          <p>มี id, userId, appId, title, description, date, mood/genre, imageUrl, rating และ isFavorite
+          เพื่อกำหนดรูปข้อมูลเดียวให้หลายชั้นใช้ตรงกัน</p>
+        </details>
+        <details>
+          <summary>
+            ทำไม toMap กับ toJson แยกกัน?
+          </summary>
+          <p>SQLite แทน bool ด้วย integer 0/1 ส่วน JSON/Firestore รองรับ bool จริง; แยก serializer
+          ทำให้ชนิดข้อมูลถูกตาม backend</p>
+        </details>
+        <details>
+          <summary>
+            เพิ่มกับแก้ไขแยกกันอย่างไร?
+          </summary>
+          <p>ฟอร์มใหม่ไม่มี id จึง repository สร้าง id แล้ว POST; ตอนแก้ส่ง id เดิมและใช้ PUT อัปเดต record เดิม</p>
+        </details>
+        <details>
+          <summary>
+            validator ทำงานอย่างไร?
+          </summary>
+          <p>Form เรียก validator ของแต่ละ TextFormField; คืนข้อความเมื่อผิดหรือ null เมื่อผ่าน; _save ไม่เรียก backend
+          หาก form ไม่ผ่าน</p>
+        </details>
+        <details>
+          <summary>
+            ทำไมตรวจ mounted หลัง await?
+          </summary>
+          <p>ระหว่างรอ network ผู้ใช้อาจปิดหน้าไปแล้ว; mounted ป้องกันใช้ context/setState หลัง State ถูก dispose</p>
+        </details>
+        <details>
+          <summary>
+            Navigator.push และ MaterialPageRoute ทำอะไร?
+          </summary>
+          <p>push เปิด route ใหม่บน navigation stack; MaterialPageRoute สร้างหน้ารายละเอียดและส่ง model ผ่าน
+          constructor</p>
+        </details>
+        <details>
+          <summary>
+            FutureBuilder มีสถานะอะไร?
+          </summary>
+          <p>ConnectionState ใช้แยกกำลังรอ; hasError แยก error; data ว่างเป็น empty state; มีข้อมูลจึงวาด list</p>
+        </details>
+        <details>
+          <summary>
+            ทำไมเก็บ Future ใน State?
+          </summary>
+          <p>กัน request ซ้ำจาก rebuild; refresh/retry เท่านั้นที่สร้าง Future ใหม่</p>
+        </details>
+        <details>
+          <summary>
+            SQLite เป็นฐานข้อมูลหลักหรือไม่?
+          </summary>
+          <p>ไม่ใช่ใน flow นี้ เป็นสำเนา local; remote API/Firestore ใช้การเขียนหลักและข้อมูล stream ล่าสุดแทน
+          cache</p>
+        </details>
+        <details>
+          <summary>
+            ทำงาน offline ได้แค่ไหน?
+          </summary>
+          <p>อ่านข้อมูลที่เคย cache ได้ในบางช่วง แต่เพิ่ม/แก้/ลบไม่ถูก queue ส่งภายหลัง; ต้องออนไลน์เพื่อเขียน
+          Cloud</p>
+        </details>
+        <details>
+          <summary>
+            ทำไม mobile กับ web มี adapter ต่างกัน?
+          </summary>
+          <p>sqflite เป็นแนว native; browser มี runtime/storage ต่างกัน จึงใช้ conditional import เลือก adapter โดยคง
+          interface เดียวกัน</p>
+        </details>
+        <details>
+          <summary>
+            REST API มี method อะไร?
+          </summary>
+          <p>GET อ่าน, POST สร้าง, PUT แก้ไข, DELETE ลบ; status 2xx ถือว่าสำเร็จ ส่วน error ถูกแปลงเป็น
+          ApiException</p>
+        </details>
+        <details>
+          <summary>
+            Firebase ID token ใช้ทำอะไร?
+          </summary>
+          <p>พิสูจน์ session ของผู้ใช้ตอนเรียก private API; server ส่งต่อ token ให้ Firestore ตรวจตัวตนและ Rules</p>
+        </details>
+        <details>
+          <summary>
+            API decode JWT แล้วพอปลอดภัยหรือยัง?
+          </summary>
+          <p>ไม่พอ การอ่าน claim อย่างเดียวไม่ verify ลายเซ็น; ในโค้ดส่ง token ต่อให้ Firestore ซึ่งต้องตรวจ token
+          จริงและบังคับ Rules; ควรยืนยันด้วยการทดสอบบัญชีจริงและ deployment ที่ใช้</p>
+        </details>
+        <details>
+          <summary>
+            Firestore Rules ป้องกันเห็นข้อมูลคนอื่นอย่างไร?
+          </summary>
+          <p>ตรวจ request.auth ไม่เป็น null และ userId เท่ากับ UID; read/delete ตรวจ document เดิม ส่วน create/update
+          ตรวจข้อมูลใหม่ด้วย</p>
+        </details>
+        <details>
+          <summary>
+            ทำไม update ตรวจ owner สองครั้ง?
+          </summary>
+          <p>ต้องเป็นเจ้าของ document เดิมและข้อมูลที่เขียนใหม่ยังระบุ owner เดิม ป้องกันย้าย document ไปบัญชีอื่น</p>
+        </details>
+        <details>
+          <summary>
+            กรองผู้ใช้ใน UI อย่างเดียวพอไหม?
+          </summary>
+          <p>ไม่พอ เพราะ client ถูกแก้หรือเรียก endpoint ตรงได้; ต้องจำกัดที่ API/Firestore Rules ด้วย</p>
+        </details>
+        <details>
+          <summary>
+            API key ใน Firebase config เป็นรหัสผ่านไหม?
+          </summary>
+          <p>โดยทั่วไปเป็น identifier/config สำหรับ client ไม่ใช่ private key; แต่ Rules ต้องเข้ม และห้ามเผยแพร่
+          service-account private key, user token หรือ password</p>
+        </details>
+        <details>
+          <summary>
+            รูปจาก API เสียจะเกิดอะไร?
+          </summary>
+          <p>GameArtwork แสดง placeholder ระหว่างโหลดและ error fallback เมื่อโหลดไม่สำเร็จ
+          แทนการปล่อยภาพเสียหรือหน้าพัง</p>
+        </details>
+        <details>
+          <summary>
+            รูปจากกล้องลดขนาดอย่างไร?
+          </summary>
+          <p>แก้ orientation ตาม EXIF, resize ลดขอบภาพเป็นขั้น และลด JPEG quality จนได้ไม่เกินประมาณ 250 KB</p>
+        </details>
+        <details>
+          <summary>
+            สถิติคำนวณจากไหน?
+          </summary>
+          <p>คำนวณจาก list เกมที่ได้มา นับจำนวนแต่ละ genre และ favorite แล้วแสดงตัวเลข/กราฟ;
+          ไม่ได้เก็บยอดซ้ำแยกอีกฐาน</p>
+        </details>
+        <details>
+          <summary>
+            ทำไมกราฟใช้สี index % colors.length?
+          </summary>
+          <p>เลือกสีตามลำดับหมวด; modulo ทำให้สีวนกลับเมื่อจำนวนหมวดมากกว่าจำนวนสีที่เตรียมไว้และไม่เกิด index
+          เกินขอบเขต</p>
+        </details>
+        <details>
+          <summary>
+            empty state กับ error state ต่างกันอย่างไร?
+          </summary>
+          <p>empty คือ request สำเร็จแต่ไม่มีข้อมูล; error คือโหลดไม่สำเร็จ จึงควรแสดงข้อความและ action ที่ต่างกัน</p>
+        </details>
+        <details>
+          <summary>
+            ถ้าบันทึก API สำเร็จแต่ cache ล้มเหลว?
+          </summary>
+          <p>Cloud อาจมีข้อมูลแล้วแต่ local mirror บันทึกไม่สำเร็จ; รอบโหลดถัดไปสามารถดึง cloud มาแทน cache; ควรตรวจ
+          log/error และอย่าอ้างว่า transaction กระจายข้ามระบบ</p>
+        </details>
+        <details>
+          <summary>
+            มี test อะไรบ้าง?
+          </summary>
+          <p>มี API/UI tests, CRUD tests ด้วย fake repository และ widget tests; นอกเหนือจากนั้นต้องทดลอง deployment,
+          Auth, Rules, network และเครื่องจริงแยก</p>
+        </details>
+        <details>
+          <summary>
+            พิสูจน์ว่าข้อมูลแยก user ได้อย่างไร?
+          </summary>
+          <p>ล็อกอินบัญชี A เพิ่มเกม, logout แล้วบัญชี B ต้องไม่เห็น; ตรวจ userId ใน Firestore และลอง Rules/endpoint
+          ด้วย token ของแต่ละบัญชี</p>
+        </details>
+        <details>
+          <summary>
+            อะไรคือข้อจำกัดที่ยอมรับได้ของงาน?
+          </summary>
+          <p>การเขียนต้องออนไลน์, local cache ไม่ใช่ offline sync, รูป data URI มีข้อจำกัดขนาด, และ behavior
+          จริงขึ้นกับ API/Rules ที่ deploy; บอกตรงพร้อมแนวพัฒนาต่อ เช่น queued writes และ token verification ฝั่ง
+          middleware</p>
+        </details>
+        <details>
+          <summary>
+            ถ้ามีเวลาพัฒนาต่อจะทำอะไร?
+          </summary>
+          <p>เพิ่ม offline write queue พร้อม conflict policy, retry/backoff, integration tests กับ Firebase Emulator,
+          pagination/search ฝั่ง server และอัปโหลดรูปไป object storage แทนเก็บ data URI ใน document</p>
+        </details>
+      </div>
+    </section>
+    <footer>
+      Steam Favorite · โค้ดอธิบาย + ชุดคำถามตอบ · วชิรวิทย์ วงค์แสง · 67011212055
+    </footer>
+  </main>
+  <script>
+  const s=document.querySelector('#search');s.addEventListener('input',()=>{const q=s.value.trim().toLocaleLowerCase('th');document.querySelectorAll('.chapter').forEach(x=>x.hidden=!!q&&!x.innerText.toLocaleLowerCase('th').includes(q));});
+  </script>
+</body>
+</html>
